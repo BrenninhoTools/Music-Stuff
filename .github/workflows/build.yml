@@ -6,40 +6,135 @@ on:
     paths-ignore:
       - "**.md"
       - "LICENSE"
+      - "licenses/**"
       - ".gitignore"
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - "**.md"
       - "LICENSE"
+      - "licenses/**"
       - ".gitignore"
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        type: choice
+        default: all
+        options:
+          - all
+          - android
+          - windows
+          - linux
+          - macos
+          - ios
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
 jobs:
-  android:
-    name: Music Stuff-Android
+  changes:
+    name: Choose builds
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      android: ${{ steps.plan.outputs.android }}
+      windows: ${{ steps.plan.outputs.windows }}
+      linux: ${{ steps.plan.outputs.linux }}
+      macos: ${{ steps.plan.outputs.macos }}
+      ios: ${{ steps.plan.outputs.ios }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Find changed areas
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@v3
         with:
-          distribution: temurin
-          java-version: "17"
+          filters: |
+            shared:
+              - "app/src/main/java/com/brenninhotools/musicstuff/binary/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/convert/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/flm/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/flp/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/generate/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/platform/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/ui/**"
+              - "app/src/main/res/font/**"
+              - "gradle/**"
+              - "gradlew*"
+              - "*.gradle.kts"
+              - "gradle.properties"
+              - ".github/**"
+            android:
+              - "app/**"
+            desktop:
+              - "desktop/**"
+              - "app/src/main/java/com/brenninhotools/musicstuff/jvm/**"
+            ios:
+              - "ios/**"
+              - "iosApp/**"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-          gradle-home-cache-cleanup: true
+      - name: Plan builds
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          PLATFORM: ${{ inputs.platform }}
+          SHARED: ${{ steps.filter.outputs.shared }}
+          ANDROID: ${{ steps.filter.outputs.android }}
+          DESKTOP: ${{ steps.filter.outputs.desktop }}
+          IOS: ${{ steps.filter.outputs.ios }}
+        run: |
+          wanted() {
+            if [ "$EVENT" = "workflow_dispatch" ]; then
+              [ "$PLATFORM" = "all" ] || [ "$PLATFORM" = "$1" ]
+            else
+              [ "$SHARED" = "true" ] || [ "$2" = "true" ]
+            fi
+          }
+          for target in android:"$ANDROID" windows:"$DESKTOP" linux:"$DESKTOP" macos:"$DESKTOP" ios:"$IOS"; do
+            name="${target%%:*}"
+            changed="${target#*:}"
+            if wanted "$name" "$changed"; then
+              echo "$name=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$name=false" >> "$GITHUB_OUTPUT"
+            fi
+          done
+
+  android:
+    name: Music Stuff-Android
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build
+        uses: ./.github/actions/setup-build
 
       - name: Test and build debug APK
         run: ./gradlew :app:testDebugUnitTest :app:assembleDebug -Pmusicstuff.modules=app
+
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Music Stuff-Android-Tests
+          path: app/build/reports/tests
+          retention-days: 7
 
       - name: Name the APK
         run: |
@@ -51,25 +146,21 @@ jobs:
         with:
           name: Music Stuff-Android
           path: out/Music Stuff-Android.apk
+          compression-level: 0
+          retention-days: 14
 
   windows:
     name: Music Stuff-Windows
+    needs: changes
+    if: needs.changes.outputs.windows == 'true'
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-          gradle-home-cache-cleanup: true
+      - name: Set up build
+        uses: ./.github/actions/setup-build
 
       - name: Build installer
         shell: bash
@@ -87,25 +178,20 @@ jobs:
           name: Music Stuff-Windows
           path: out/Music Stuff-Windows.exe
           compression-level: 0
+          retention-days: 14
 
   linux:
     name: Music Stuff-Linux
+    needs: changes
+    if: needs.changes.outputs.linux == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-          gradle-home-cache-cleanup: true
+      - name: Set up build
+        uses: ./.github/actions/setup-build
 
       - name: Build package and portable app
         run: ./gradlew :desktop:packageDeb :desktop:createDistributable -Pmusicstuff.modules=desktop
@@ -124,25 +210,20 @@ jobs:
             out/Music Stuff-Linux.deb
             out/Music Stuff-Linux.tar.gz
           compression-level: 0
+          retention-days: 14
 
   macos:
     name: Music Stuff-MacOS
+    needs: changes
+    if: needs.changes.outputs.macos == 'true'
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-          gradle-home-cache-cleanup: true
+      - name: Set up build
+        uses: ./.github/actions/setup-build
 
       - name: Build disk image and app
         run: ./gradlew :desktop:packageDmg :desktop:createDistributable -Pmusicstuff.modules=desktop
@@ -161,41 +242,50 @@ jobs:
             out/Music Stuff-MacOS.dmg
             out/Music Stuff-MacOS.zip
           compression-level: 0
+          retention-days: 14
 
   ios:
     name: Music Stuff-IOS
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-latest
+    timeout-minutes: 45
+    env:
+      XCODEGEN_VERSION: "2.42.0"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          cache-read-only: false
-          gradle-home-cache-cleanup: true
+      - name: Set up build
+        uses: ./.github/actions/setup-build
 
       - name: Cache Kotlin/Native
         uses: actions/cache@v4
         with:
           path: ~/.konan
-          key: konan-${{ runner.os }}-debug-${{ hashFiles('gradle/libs.versions.toml') }}
-          restore-keys: konan-${{ runner.os }}-
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml') }}
+          restore-keys: konan-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Cache XcodeGen
+        id: xcodegen
+        uses: actions/cache@v4
+        with:
+          path: ~/xcodegen
+          key: xcodegen-${{ runner.os }}-${{ env.XCODEGEN_VERSION }}
+
+      - name: Install XcodeGen
+        if: steps.xcodegen.outputs.cache-hit != 'true'
+        run: |
+          curl -sSL -o "$RUNNER_TEMP/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$HOME"
 
       - name: Build the Kotlin framework
-        run: ./gradlew :ios:linkDebugFrameworkIosArm64 -Pmusicstuff.modules=ios --build-cache "-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -XX:MaxMetaspaceSize=768m"
+        run: ./gradlew :ios:linkDebugFrameworkIosArm64 -Pmusicstuff.modules=ios "-Dorg.gradle.jvmargs=-Xmx3g -XX:+UseParallelGC -XX:MaxMetaspaceSize=768m"
 
       - name: Generate the Xcode project
         run: |
-          curl -sSL -o "$RUNNER_TEMP/xcodegen.zip" https://github.com/yonaskolb/XcodeGen/releases/download/2.42.0/xcodegen.zip
-          unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
-          cd iosApp && "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate --quiet
+          cd iosApp
+          "$HOME/xcodegen/bin/xcodegen" generate --quiet
 
       - name: Build the app
         run: |
@@ -217,3 +307,34 @@ jobs:
           name: Music Stuff-IOS
           path: out/Music Stuff-IOS.ipa
           compression-level: 0
+          retention-days: 14
+
+  summary:
+    name: Build summary
+    needs: [changes, android, windows, linux, macos, ios]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Write summary
+        env:
+          ANDROID: ${{ needs.android.result }}
+          WINDOWS: ${{ needs.windows.result }}
+          LINUX: ${{ needs.linux.result }}
+          MACOS: ${{ needs.macos.result }}
+          IOS: ${{ needs.ios.result }}
+        run: |
+          {
+            echo "| Platform | Result |"
+            echo "| --- | --- |"
+            echo "| Android | $ANDROID |"
+            echo "| Windows | $WINDOWS |"
+            echo "| Linux | $LINUX |"
+            echo "| macOS | $MACOS |"
+            echo "| iOS | $IOS |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for result in "$ANDROID" "$WINDOWS" "$LINUX" "$MACOS" "$IOS"; do
+            if [ "$result" = "failure" ]; then
+              exit 1
+            fi
+          done

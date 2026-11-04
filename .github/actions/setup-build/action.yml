@@ -1,0 +1,18 @@
+name: Set up build
+description: Installs JDK 17 and restores the Gradle cache
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: "17"
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        cache-read-only: false
+        gradle-home-cache-cleanup: true
+        add-job-summary: on-failure
