@@ -1,6 +1,6 @@
 # Music Stuff
 
-A Kotlin remake of Music Stuff for Android and Windows: convert FL Studio projects and generate new songs for FL Studio Mobile.
+A Kotlin remake of Music Stuff for Android, iOS, Windows, Linux and macOS: convert FL Studio projects and generate new songs for FL Studio Mobile.
 
 ## Features
 
@@ -38,6 +38,11 @@ Requires JDK 17. The Android build also needs the Android SDK.
 ./gradlew :app:assembleDebug -Pmusicstuff.modules=app
 ./gradlew :desktop:run -Pmusicstuff.modules=desktop
 ./gradlew :desktop:packageExe -Pmusicstuff.modules=desktop
+./gradlew :desktop:packageDeb :desktop:createDistributable -Pmusicstuff.modules=desktop
+./gradlew :desktop:packageDmg :desktop:createDistributable -Pmusicstuff.modules=desktop
+./gradlew :ios:linkDebugFrameworkIosArm64 -Pmusicstuff.modules=ios
 ```
 
-GitHub Actions builds on every push and uploads `Music Stuff-Android`, `Music Stuff-Windows` and rendered `Music Stuff-Screens` artifacts.
+The iOS app needs macOS, Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen). After linking the framework, run `xcodegen generate` in `iosApp`. The `.ipa` from CI is unsigned, so sign it or sideload it to install.
+
+GitHub Actions builds on every push and uploads `Music Stuff-Android`, `Music Stuff-Windows`, `Music Stuff-Linux`, `Music Stuff-MacOS`, `Music Stuff-IOS` and rendered `Music Stuff-Screens` artifacts.

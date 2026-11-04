@@ -3,6 +3,7 @@ package com.brenninhotools.musicstuff.generate
 import com.brenninhotools.musicstuff.flm.FlmNote
 import com.brenninhotools.musicstuff.flm.FlmProject
 import com.brenninhotools.musicstuff.flm.FlmTrack
+import kotlin.math.abs
 import kotlin.random.Random
 
 data class GeneratedTrack(val part: SongPart, val track: FlmTrack)
@@ -68,8 +69,8 @@ object SongGenerator {
 
     private fun pitch(settings: SongSettings, base: Int, degree: Int): Int {
         val notes = scale(settings.style.minor)
-        val octaves = Math.floorDiv(degree, notes.size)
-        return base + settings.root + notes[Math.floorMod(degree, notes.size)] + octaves * OCTAVE
+        val octaves = degree.floorDiv(notes.size)
+        return base + settings.root + notes[degree.mod(notes.size)] + octaves * OCTAVE
     }
 
     private fun note(step: Int, steps: Int, key: Int, velocity: Int) = FlmNote(
@@ -146,7 +147,7 @@ object SongGenerator {
                 val chordRoot = progression[bar % progression.size]
                 degree = if (onBeat) {
                     val tones = listOf(chordRoot, chordRoot + 2, chordRoot + 4)
-                    tones.minByOrNull { Math.abs(it - degree) } ?: chordRoot
+                    tones.minByOrNull { abs(it - degree) } ?: chordRoot
                 } else {
                     degree + listOf(-2, -1, -1, 1, 1, 2).random(random)
                 }

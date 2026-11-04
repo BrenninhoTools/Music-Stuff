@@ -7,6 +7,9 @@ import com.brenninhotools.musicstuff.generate.SongGenerator
 import com.brenninhotools.musicstuff.generate.SongPart
 import com.brenninhotools.musicstuff.generate.SongSettings
 import com.brenninhotools.musicstuff.generate.SongStyle
+import com.brenninhotools.musicstuff.platform.AccessFailure
+import com.brenninhotools.musicstuff.platform.IoFailure
+import com.brenninhotools.musicstuff.platform.nowMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -16,7 +19,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.IOException
 import kotlin.random.Random
 
 data class GeneratorState(
@@ -30,7 +32,7 @@ data class GeneratorState(
 class GeneratorController(
     private val scope: CoroutineScope,
     private val player: () -> AudioPlayer,
-    seed: Long = System.currentTimeMillis(),
+    seed: Long = nowMillis(),
 ) {
     private val mutableState = MutableStateFlow(GeneratorState(SongGenerator.generate(SongSettings(seed = seed))))
     private var playback: Job? = null
@@ -82,14 +84,14 @@ class GeneratorController(
         mutableState.value = mutableState.value.copy(saving = true, saved = false, error = null)
         scope.launch {
             val error = try {
-                val started = System.currentTimeMillis()
+                val started = nowMillis()
                 withContext(Dispatchers.Default) { target.write(FlmWriter.write(song.project)) }
-                val remaining = MIN_SAVE_MILLIS - (System.currentTimeMillis() - started)
+                val remaining = MIN_SAVE_MILLIS - (nowMillis() - started)
                 if (remaining > 0) delay(remaining)
                 null
-            } catch (error: IOException) {
+            } catch (error: IoFailure) {
                 "The file couldn't be saved: ${error.message}"
-            } catch (error: SecurityException) {
+            } catch (error: AccessFailure) {
                 "Music Stuff doesn't have permission to save there."
             }
             mutableState.value = mutableState.value.copy(saving = false, saved = error == null, error = error)

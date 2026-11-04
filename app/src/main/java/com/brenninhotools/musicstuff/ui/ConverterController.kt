@@ -13,6 +13,10 @@ import com.brenninhotools.musicstuff.flp.FlpFormatException
 import com.brenninhotools.musicstuff.flp.FlpParser
 import com.brenninhotools.musicstuff.flp.FlpProject
 import com.brenninhotools.musicstuff.flp.FlpWriter
+import com.brenninhotools.musicstuff.platform.AccessFailure
+import com.brenninhotools.musicstuff.platform.IoFailure
+import com.brenninhotools.musicstuff.platform.MemoryFailure
+import com.brenninhotools.musicstuff.platform.nowMillis
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -21,7 +25,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.IOException
 
 enum class ConvertDirection(
     val label: String,
@@ -110,11 +113,11 @@ class ConverterController(private val scope: CoroutineScope) {
                 ConverterState.Failed(error.message ?: "This file isn't a valid .flp project.")
             } catch (error: FlmFormatException) {
                 ConverterState.Failed(error.message ?: "This file isn't a valid .flm project.")
-            } catch (error: IOException) {
+            } catch (error: IoFailure) {
                 ConverterState.Failed("The file couldn't be read: ${error.message}")
-            } catch (error: SecurityException) {
+            } catch (error: AccessFailure) {
                 ConverterState.Failed("Music Stuff doesn't have permission to read this file.")
-            } catch (error: OutOfMemoryError) {
+            } catch (error: MemoryFailure) {
                 ConverterState.Failed("This file is too large to open on this device.")
             }
         }
@@ -140,9 +143,9 @@ class ConverterController(private val scope: CoroutineScope) {
                 val bytes = stage(current.fileName, stages, ConvertStage.PLACING) { encode(origin, current.arrangement) }
                 stage(current.fileName, stages, ConvertStage.WRITING) { target.write(bytes) }
                 null
-            } catch (error: IOException) {
+            } catch (error: IoFailure) {
                 "The file couldn't be saved: ${error.message}"
-            } catch (error: SecurityException) {
+            } catch (error: AccessFailure) {
                 "Music Stuff doesn't have permission to save there."
             }
             mutableState.value = current.copy(saved = error == null, saveError = error)
@@ -215,9 +218,9 @@ class ConverterController(private val scope: CoroutineScope) {
         work: () -> T,
     ): T {
         mutableState.value = ConverterState.Working(fileName, stages, stage)
-        val started = System.currentTimeMillis()
+        val started = nowMillis()
         val result = withContext(Dispatchers.Default) { work() }
-        val remaining = MIN_STAGE_MILLIS - (System.currentTimeMillis() - started)
+        val remaining = MIN_STAGE_MILLIS - (nowMillis() - started)
         if (remaining > 0) delay(remaining)
         return result
     }

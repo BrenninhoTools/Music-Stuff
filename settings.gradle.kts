@@ -25,3 +25,4 @@ val modules = providers.gradleProperty("musicstuff.modules").orNull?.split(',')?
 fun wanted(name: String) = modules == null || name in modules
 if (wanted("app")) include(":app")
 if (wanted("desktop")) include(":desktop")
+if (wanted("ios") && System.getProperty("os.name").startsWith("Mac")) include(":ios")

@@ -1,13 +1,16 @@
 package com.brenninhotools.musicstuff.flm
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import com.brenninhotools.musicstuff.binary.f64At
+import com.brenninhotools.musicstuff.binary.i32At
+import com.brenninhotools.musicstuff.binary.latin1At
+import com.brenninhotools.musicstuff.binary.u16At
+import com.brenninhotools.musicstuff.binary.u32At
+import com.brenninhotools.musicstuff.binary.u8At
 import kotlin.math.roundToInt
 
 class FlmParser private constructor(private val data: ByteArray) {
     private class Chunk(val tag: String, val start: Int, val end: Int)
 
-    private val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
     private var audioClips = 0
     private var automationTracks = 0
     private var unreadBlocks = 0
@@ -31,7 +34,7 @@ class FlmParser private constructor(private val data: ByteArray) {
         if (unreadBlocks > 0) warnings += "$unreadBlocks block(s) had an unexpected layout and were skipped."
         return FlmDocument(
             title = text(head.start + TITLE_OFFSET, TITLE_SIZE).ifEmpty { "Untitled" },
-            tempo = buffer.getDouble(head.start + TEMPO_OFFSET).takeIf { it > 0.0 } ?: DEFAULT_TEMPO,
+            tempo = data.f64At(head.start + TEMPO_OFFSET).takeIf { it > 0.0 } ?: DEFAULT_TEMPO,
             timeSigNumerator = numerator,
             timeSigDenominator = denominator,
             appVersion = appVersion(head),
@@ -43,7 +46,7 @@ class FlmParser private constructor(private val data: ByteArray) {
     private fun appVersion(head: Chunk): String {
         val offset = head.start + VERSION_OFFSET
         if (offset + 4 > head.end) return ""
-        val size = buffer.getInt(offset)
+        val size = data.i32At(offset)
         if (size !in 1..MAX_VERSION_SIZE || offset + 4 + size > head.end) return ""
         return ascii(offset + 4, size)
     }
@@ -67,7 +70,7 @@ class FlmParser private constructor(private val data: ByteArray) {
         val parts = chunks(chunk.start, chunk.end)
         val description = parts.firstOrNull { it.tag == "DESc" } ?: return emptyList()
         val clips = parts.filter { it.tag == "CLIP" }
-        return when (buffer.getInt(description.start)) {
+        return when (data.i32At(description.start)) {
             TRACK_NOTES -> clips.mapNotNull(::clip)
             TRACK_AUDIO -> {
                 audioClips += clips.size
@@ -95,9 +98,9 @@ class FlmParser private constructor(private val data: ByteArray) {
         val notes = notes(events)
         if (notes.isEmpty()) return null
         val end = notes.maxOf { it.positionBeats + it.lengthBeats }
-        val length = buffer.getDouble(header.start).takeIf { it > 0.0 } ?: end
+        val length = data.f64At(header.start).takeIf { it > 0.0 } ?: end
         return FlmClip(
-            positionBeats = (buffer.getInt(chunk.start).toLong() and 0xFFFFFFFFL) / FlmWriter.TICKS_PER_BEAT.toDouble(),
+            positionBeats = data.u32At(chunk.start) / FlmWriter.TICKS_PER_BEAT.toDouble(),
             lengthBeats = maxOf(length, end),
             notes = notes,
         )
@@ -105,16 +108,16 @@ class FlmParser private constructor(private val data: ByteArray) {
 
     private fun notes(chunk: Chunk): List<FlmNote> {
         val size = chunk.end - chunk.start
-        if (size < 2 || (size - 2) % RECORD_SIZE != 0 || buffer.getShort(chunk.start).toInt() != RECORD_SIZE) {
+        if (size < 2 || (size - 2) % RECORD_SIZE != 0 || data.u16At(chunk.start) != RECORD_SIZE) {
             unreadBlocks++
             return emptyList()
         }
         return (0 until (size - 2) / RECORD_SIZE).map { index ->
             val offset = chunk.start + 2 + index * RECORD_SIZE
             FlmNote(
-                positionBeats = (buffer.getInt(offset).toLong() and 0xFFFFFFFFL) / FlmWriter.TICKS_PER_BEAT.toDouble(),
-                lengthBeats = buffer.getDouble(offset + 4),
-                key = buffer.getShort(offset + 12).toInt() and 0xFFFF,
+                positionBeats = data.u32At(offset) / FlmWriter.TICKS_PER_BEAT.toDouble(),
+                lengthBeats = data.f64At(offset + 4),
+                key = data.u16At(offset + 12),
                 velocity = scale(offset + 14, FlmWriter.MAX_LEVEL).coerceAtLeast(1),
                 release = scale(offset + 16, DEFAULT_RELEASE),
             )
@@ -122,7 +125,7 @@ class FlmParser private constructor(private val data: ByteArray) {
     }
 
     private fun scale(offset: Int, maximum: Int): Int {
-        val value = buffer.getShort(offset).toInt() and 0xFFFF
+        val value = data.u16At(offset)
         return (value.toDouble() / LEVEL_MAX * maximum).roundToInt().coerceIn(0, maximum)
     }
 
@@ -131,7 +134,7 @@ class FlmParser private constructor(private val data: ByteArray) {
         var offset = start
         while (offset + CHUNK_HEADER <= end) {
             val tag = ascii(offset, 4)
-            val size = buffer.getInt(offset + 4).toLong() and 0xFFFFFFFFL
+            val size = data.u32At(offset + 4)
             val payload = offset + CHUNK_HEADER
             if (!tag.all { it.isLetterOrDigit() } || payload + size > end) {
                 unreadBlocks++
@@ -143,14 +146,14 @@ class FlmParser private constructor(private val data: ByteArray) {
         return chunks
     }
 
-    private fun byteAt(offset: Int): Int = data[offset].toInt() and 0xFF
+    private fun byteAt(offset: Int): Int = data.u8At(offset)
 
-    private fun ascii(offset: Int, size: Int): String = String(data, offset, size, Charsets.ISO_8859_1)
+    private fun ascii(offset: Int, size: Int): String = data.latin1At(offset, size)
 
     private fun text(offset: Int, size: Int): String {
         var end = offset
         while (end < offset + size && data[end].toInt() != 0) end++
-        return String(data, offset, end - offset, Charsets.UTF_8).trim()
+        return data.decodeToString(offset, end).trim()
     }
 
     companion object {
@@ -174,7 +177,6 @@ class FlmParser private constructor(private val data: ByteArray) {
         private const val DEFAULT_TIME_SIG = 4
         private const val DEFAULT_TEMPO = 140.0
 
-        @Throws(FlmFormatException::class)
         fun parse(data: ByteArray): FlmDocument = FlmParser(data).parse()
     }
 }

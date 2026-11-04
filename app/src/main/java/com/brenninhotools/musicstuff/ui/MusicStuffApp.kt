@@ -30,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
@@ -128,7 +129,7 @@ fun AppShell(
 
 @Composable
 private fun Mascot(size: Dp) {
-    Image(LocalPlatform.current.mascot(), contentDescription = null, modifier = Modifier.size(size))
+    Image(rememberVectorPainter(MascotIcon), contentDescription = null, modifier = Modifier.size(size))
 }
 
 @Composable

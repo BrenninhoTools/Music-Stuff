@@ -1,6 +1,5 @@
 package com.brenninhotools.musicstuff.desktop
 
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.platform.Font
 import com.brenninhotools.musicstuff.ui.AppPlatform
@@ -10,7 +9,7 @@ import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
 
-const val APP_VERSION = "0.0.2"
+const val APP_VERSION = "0.0.3"
 
 private class DiskProjectFile(private val file: File) : ProjectFile {
     override val name: String = file.name
@@ -44,6 +43,5 @@ fun desktopPlatform(owner: () -> Frame?): AppPlatform = AppPlatform(
             onPicked(SaveTarget { bytes -> withExtension(file, extension).writeBytes(bytes) })
         }
     },
-    mascot = { painterResource("ic_launcher_foreground.xml") },
     backHandler = { _, _ -> },
 )

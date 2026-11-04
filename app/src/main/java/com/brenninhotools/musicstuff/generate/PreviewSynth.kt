@@ -1,6 +1,8 @@
 package com.brenninhotools.musicstuff.generate
 
+import com.brenninhotools.musicstuff.binary.ByteSink
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.pow
 import kotlin.math.sin
@@ -15,6 +17,7 @@ object PreviewSynth {
     private const val RELEASE_SECONDS = 0.05
     private const val MAX_SAMPLE = 32000f
     private const val DRIVE = 1.1f
+    private const val WAV_HEADER_SIZE = 44
 
     fun render(song: GeneratedSong): ShortArray {
         val secondsPerBeat = 60.0 / song.settings.bpm
@@ -37,6 +40,25 @@ object PreviewSynth {
             }
         }
         return ShortArray(mix.size) { (tanh(mix[it] * DRIVE) * MAX_SAMPLE).toInt().toShort() }
+    }
+
+    fun wav(samples: ShortArray): ByteArray {
+        val sink = ByteSink(samples.size * 2 + WAV_HEADER_SIZE)
+        val dataSize = samples.size * 2
+        sink.latin1("RIFF")
+        sink.u32(dataSize + WAV_HEADER_SIZE - 8)
+        sink.latin1("WAVEfmt ")
+        sink.u32(16)
+        sink.u16(1)
+        sink.u16(1)
+        sink.u32(SAMPLE_RATE)
+        sink.u32(SAMPLE_RATE * 2)
+        sink.u16(2)
+        sink.u16(16)
+        sink.latin1("data")
+        sink.u32(dataSize)
+        samples.forEach { sink.u16(it.toInt()) }
+        return sink.toByteArray()
     }
 
     private fun frequency(key: Int): Double = 440.0 * 2.0.pow((key - 69) / 12.0)
@@ -94,7 +116,7 @@ object PreviewSynth {
         val hertz = frequency(key)
         write(mix, start, length) { time, _ ->
             val position = (hertz * time) % 1.0
-            val triangle = 4 * Math.abs(position - 0.5) - 1
+            val triangle = 4 * abs(position - 0.5) - 1
             triangle.toFloat() * envelope(time, length) * level * 0.13f
         }
     }

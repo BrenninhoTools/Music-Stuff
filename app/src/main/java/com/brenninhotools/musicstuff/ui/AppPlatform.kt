@@ -2,7 +2,6 @@ package com.brenninhotools.musicstuff.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.text.font.FontFamily
 
 interface ProjectFile {
@@ -24,7 +23,6 @@ class AppPlatform(
     val version: String?,
     val pickProject: (extension: String, onPicked: (ProjectFile) -> Unit) -> Unit,
     val pickSaveTarget: (suggestedName: String, onPicked: (SaveTarget) -> Unit) -> Unit,
-    val mascot: @Composable () -> Painter,
     val backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit,
 )
 

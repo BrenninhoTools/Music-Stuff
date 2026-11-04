@@ -1,7 +1,12 @@
 package com.brenninhotools.musicstuff.flp
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
+import com.brenninhotools.musicstuff.binary.f32At
+import com.brenninhotools.musicstuff.binary.i32At
+import com.brenninhotools.musicstuff.binary.latin1At
+import com.brenninhotools.musicstuff.binary.u16At
+import com.brenninhotools.musicstuff.binary.u32At
+import com.brenninhotools.musicstuff.binary.u8At
+import com.brenninhotools.musicstuff.binary.utf16leAt
 
 class FlpFormatException(message: String) : Exception(message)
 
@@ -23,7 +28,7 @@ class FlpParser private constructor(private val data: ByteArray) {
         val clips = mutableListOf<FlpClip>()
     }
 
-    private val buffer: ByteBuffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+    private var position = 0
     private val warnings = linkedSetOf<String>()
 
     private var title = ""
@@ -49,8 +54,8 @@ class FlpParser private constructor(private val data: ByteArray) {
 
     private fun parse(): FlpProject {
         val eventsEnd = readHeader()
-        event172Size = detectEvent172Size(buffer.position(), eventsEnd)
-        while (buffer.position() < eventsEnd) {
+        event172Size = detectEvent172Size(position, eventsEnd)
+        while (position < eventsEnd) {
             if (!readEvent(eventsEnd)) break
         }
         return buildProject()
@@ -62,26 +67,27 @@ class FlpParser private constructor(private val data: ByteArray) {
         }
         if (data.size < HEADER_SIZE) throw FlpFormatException("The file is too small to be an .flp project.")
         if (readMagic() != "FLhd") throw FlpFormatException("This is not an FL Studio project (missing FLhd header).")
-        buffer.getInt()
-        buffer.getShort()
-        buffer.getShort()
-        ppq = (buffer.getShort().toInt() and 0xFFFF).takeIf { it > 0 } ?: DEFAULT_PPQ
+        position += 8
+        ppq = data.u16At(position).takeIf { it > 0 } ?: DEFAULT_PPQ
+        position += 2
         if (readMagic() != "FLdt") throw FlpFormatException("The project data chunk (FLdt) is missing.")
-        val declared = buffer.getInt().toLong() and 0xFFFFFFFFL
-        val available = (data.size - buffer.position()).toLong()
+        val declared = data.u32At(position)
+        position += 4
+        val available = (data.size - position).toLong()
         if (declared > available) warnings += "The file is shorter than its header says, so it may be truncated."
-        return (buffer.position() + minOf(declared, available)).toInt()
+        return (position + minOf(declared, available)).toInt()
     }
 
     private fun readMagic(): String {
-        val bytes = ByteArray(4)
-        buffer.get(bytes)
-        return String(bytes, Charsets.ISO_8859_1)
+        val magic = data.latin1At(position, 4)
+        position += 4
+        return magic
     }
 
     private fun readEvent(end: Int): Boolean {
-        val id = buffer.get().toInt() and 0xFF
-        val remaining = end - buffer.position()
+        val id = data.u8At(position)
+        position++
+        val remaining = end - position
         val fixedSize = when {
             id < FlpEvents.WORD_START -> 1
             id < FlpEvents.DWORD_START -> 2
@@ -90,17 +96,19 @@ class FlpParser private constructor(private val data: ByteArray) {
             else -> 0
         }
         if (fixedSize > remaining) return truncated()
+        val start = position
+        position += fixedSize
         when {
-            fixedSize == 1 -> onByte(id, buffer.get().toInt() and 0xFF)
-            fixedSize == 2 -> onWord(id, buffer.getShort().toInt() and 0xFFFF)
-            id == FlpEvents.SHORT_DWORD -> buffer.position(buffer.position() + fixedSize)
-            fixedSize == DWORD_SIZE -> onDword(id, buffer.getInt().toLong() and 0xFFFFFFFFL)
+            fixedSize == 1 -> onByte(id, data.u8At(start))
+            fixedSize == 2 -> onWord(id, data.u16At(start))
+            id == FlpEvents.SHORT_DWORD -> Unit
+            fixedSize == DWORD_SIZE -> onDword(id, data.u32At(start))
             else -> {
                 val size = readVarInt(end) ?: return truncated()
-                if (size > end - buffer.position()) return truncated()
-                val start = buffer.position()
-                onData(id, start, size.toInt())
-                buffer.position(start + size.toInt())
+                if (size > end - position) return truncated()
+                val payload = position
+                onData(id, payload, size.toInt())
+                position = payload + size.toInt()
             }
         }
         return true
@@ -150,8 +158,9 @@ class FlpParser private constructor(private val data: ByteArray) {
     private fun readVarInt(end: Int): Long? {
         var value = 0L
         var shift = 0
-        while (buffer.position() < end && shift < 35) {
-            val byte = buffer.get().toInt() and 0xFF
+        while (position < end && shift < 35) {
+            val byte = data.u8At(position)
+            position++
             value = value or ((byte and 0x7F).toLong() shl shift)
             if (byte and 0x80 == 0) return value
             shift += 7
@@ -203,7 +212,7 @@ class FlpParser private constructor(private val data: ByteArray) {
     }
 
     private fun readVersion(start: Int, size: Int) {
-        version = String(data, start, size, Charsets.US_ASCII).trimEnd('\u0000').trim()
+        version = data.latin1At(start, size).trimEnd('\u0000').trim()
         val parts = version.split('.')
         versionMajor = parts.getOrNull(0)?.toIntOrNull() ?: 0
         versionMinor = parts.getOrNull(1)?.toIntOrNull() ?: 0
@@ -216,8 +225,8 @@ class FlpParser private constructor(private val data: ByteArray) {
     }
 
     private fun decodeText(start: Int, size: Int): String {
-        val charset = if (usesUtf16(start, size)) Charsets.UTF_16LE else Charsets.ISO_8859_1
-        return String(data, start, size, charset).trimEnd('\u0000').trim()
+        val text = if (usesUtf16(start, size)) data.utf16leAt(start, size) else data.latin1At(start, size)
+        return text.trimEnd('\u0000').trim()
     }
 
     private fun readNotes(start: Int, size: Int) {
@@ -228,16 +237,16 @@ class FlpParser private constructor(private val data: ByteArray) {
         }
         for (index in 0 until size / NOTE_SIZE) {
             val offset = start + index * NOTE_SIZE
-            val position = buffer.getInt(offset).toLong() and 0xFFFFFFFFL
-            val flags = buffer.getShort(offset + 4).toInt() and 0xFFFF
-            val channel = buffer.getShort(offset + 6).toInt() and 0xFFFF
-            val length = buffer.getInt(offset + 8).toLong() and 0xFFFFFFFFL
-            val key = buffer.getShort(offset + 12).toInt() and 0xFFFF
-            val release = data[offset + 18].toInt() and 0xFF
-            val velocity = data[offset + 21].toInt() and 0xFF
+            val notePosition = data.u32At(offset)
+            val flags = data.u16At(offset + 4)
+            val channel = data.u16At(offset + 6)
+            val length = data.u32At(offset + 8)
+            val key = data.u16At(offset + 12)
+            val release = data.u8At(offset + 18)
+            val velocity = data.u8At(offset + 21)
             if (key > MAX_FLP_KEY) continue
             pattern.notes += FlpNote(
-                position = position,
+                position = notePosition,
                 length = length,
                 key = key,
                 velocity = velocity,
@@ -251,7 +260,7 @@ class FlpParser private constructor(private val data: ByteArray) {
     private fun playlistItemSize(start: Int, size: Int): Int? =
         PLAYLIST_ITEM_SIZES.firstOrNull { candidate ->
             size % candidate == 0 && (0 until size / candidate).all { index ->
-                val base = buffer.getShort(start + index * candidate + 4).toInt() and 0xFFFF
+                val base = data.u16At(start + index * candidate + 4)
                 base == PLAYLIST_PATTERN_BASE
             }
         }
@@ -265,14 +274,14 @@ class FlpParser private constructor(private val data: ByteArray) {
         }
         for (index in 0 until size / itemSize) {
             val offset = start + index * itemSize
-            val position = buffer.getInt(offset).toLong() and 0xFFFFFFFFL
-            val patternBase = buffer.getShort(offset + 4).toInt() and 0xFFFF
-            val itemIndex = buffer.getShort(offset + 6).toInt() and 0xFFFF
-            val length = buffer.getInt(offset + 8).toLong() and 0xFFFFFFFFL
+            val clipPosition = data.u32At(offset)
+            val patternBase = data.u16At(offset + 4)
+            val itemIndex = data.u16At(offset + 6)
+            val length = data.u32At(offset + 8)
             val isPattern = itemIndex > patternBase
-            val startOffset = if (isPattern) buffer.getInt(offset + 24).toFloat() else buffer.getFloat(offset + 24)
+            val startOffset = if (isPattern) data.i32At(offset + 24).toFloat() else data.f32At(offset + 24)
             arrangement.clips += FlpClip(
-                position = position,
+                position = clipPosition,
                 length = length,
                 patternIid = (itemIndex - patternBase).takeIf { isPattern },
                 startOffset = startOffset,
@@ -337,7 +346,6 @@ class FlpParser private constructor(private val data: ByteArray) {
         private const val DEFAULT_PPQ = 96
         private const val DEFAULT_TEMPO = 140.0
 
-        @Throws(FlpFormatException::class)
         fun parse(data: ByteArray): FlpProject = FlpParser(data).parse()
     }
 }

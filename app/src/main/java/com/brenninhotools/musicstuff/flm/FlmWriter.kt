@@ -1,15 +1,13 @@
 package com.brenninhotools.musicstuff.flm
 
-import java.io.ByteArrayOutputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.text.Normalizer
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.UUID
+import com.brenninhotools.musicstuff.binary.ByteSink
+import com.brenninhotools.musicstuff.binary.hexBytes
+import com.brenninhotools.musicstuff.platform.DateStamp
+import com.brenninhotools.musicstuff.platform.currentStamp
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlin.random.Random
 
 object FlmWriter {
     const val TICKS_PER_BEAT = 128
@@ -42,61 +40,57 @@ object FlmWriter {
     private const val META_TITLE_OFFSET = 520
     private const val META_SAVED_OFFSET = 2825
     private const val MIN_LENGTH_BEATS = 0.001
+    private val COMBINING_MARKS = 0x300..0x36F
     private const val ROW_VOLUME_BITS = 0x3F5A6657
     private const val PAN_CENTER = 0.5f
 
-    private val CREATED_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm-ss")
-    private val SAVED_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
+    private val LATIN_FOLDS = buildMap {
+        listOf(
+            "aàáâãäåāăą", "AÀÁÂÃÄÅĀĂĄ", "cçćĉċč", "CÇĆĈĊČ", "dďđ", "DĎĐ", "eèéêëēĕėęě", "EÈÉÊËĒĔĖĘĚ",
+            "gĝğġģ", "GĜĞĠĢ", "iìíîïĩīĭįı", "IÌÍÎÏĨĪĬĮİ", "lĺļľł", "LĹĻĽŁ", "nñńņň", "NÑŃŅŇ",
+            "oòóôõöøōŏő", "OÒÓÔÕÖØŌŎŐ", "rŕŗř", "RŔŖŘ", "sśŝşš", "SŚŜŞŠ", "tţťŧ", "TŢŤŦ",
+            "uùúûüũūŭůűų", "UÙÚÛÜŨŪŬŮŰŲ", "yýÿŷ", "YÝŶŸ", "zźżž", "ZŹŻŽ",
+        ).forEach { group -> group.drop(1).forEach { put(it, group[0]) } }
+    }
 
-    private val SAMPLER_GUID = hex("c9908dc3cafc218f124abfdabd018b6f")
-    private val MASTER_TAIL = hex(
+    private val SAMPLER_GUID = hexBytes("c9908dc3cafc218f124abfdabd018b6f")
+    private val MASTER_TAIL = hexBytes(
         "000000000000000000000000" +
             "5060653e000080f9b6a0e13f0000000000003c4000000000" +
             "00000000d6081954dfb3a772c5295a05706634e400000000",
     )
-    private val CHANNEL_LEVELS = hex("0000803f000080f9b6a0e13f000000600d515cbf00000000")
-    private val SEND_LEVELS = hex("000000000000803f0000803f0000803f57665a3f57665a3f")
-    private val PADS_MAP = hex("31304d53000000005041445316000000000102030405060708090a0b0c0d0e0f101112131415")
-    private val SAMPLER_PARAMS = hex(
+    private val CHANNEL_LEVELS = hexBytes("0000803f000080f9b6a0e13f000000600d515cbf00000000")
+    private val SEND_LEVELS = hexBytes("000000000000803f0000803f0000803f57665a3f57665a3f")
+    private val PADS_MAP = hexBytes("31304d53000000005041445316000000000102030405060708090a0b0c0d0e0f101112131415")
+    private val SAMPLER_PARAMS = hexBytes(
         "0000803f000000000000803e0000003f0000003f0000803f0000803f00000000" +
             "000000000000803f00000000000000000000803f000000000000000000000000" +
             "00000000000000000000803f0000803f0000803f0000003f000000000000803f" +
             "0000803f0000803f0000003f000000000000000000000000000000000000003f" +
             "0000000000000000",
     )
-    private val SAMPLE_RANGE = hex("0000003f0000803f0000003f")
-    private val VIEW_TAIL = hex("00000080b4af5abf0000006059170b40000000c034ecd03f")
+    private val SAMPLE_RANGE = hexBytes("0000003f0000803f0000003f")
+    private val VIEW_TAIL = hexBytes("00000080b4af5abf0000006059170b40000000c034ecd03f")
 
     private val CHORDS = listOf(
         Triple(0, 3, 0), Triple(2, 3, 1), Triple(4, 3, 1), Triple(5, 3, 0),
         Triple(7, 3, 0), Triple(9, 3, 1), Triple(11, 3, 3), Triple(0, 4, 0),
     )
 
-    private fun hex(value: String): ByteArray =
-        ByteArray(value.length / 2) { value.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
-
     private class Payload {
-        private val out = ByteArrayOutputStream()
+        private val out = ByteSink()
 
-        fun u8(value: Int) = apply { out.write(value and 0xFF) }
+        fun u8(value: Int) = apply { out.u8(value) }
 
-        fun u16(value: Int) = apply {
-            u8(value)
-            u8(value shr 8)
-        }
+        fun u16(value: Int) = apply { out.u16(value) }
 
-        fun u32(value: Int) = apply {
-            u16(value)
-            u16(value ushr 16)
-        }
+        fun u32(value: Int) = apply { out.u32(value) }
 
-        fun f32(value: Float) = apply { u32(value.toRawBits()) }
+        fun f32(value: Float) = apply { out.f32(value) }
 
-        fun f64(value: Double) = apply {
-            bytes(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putDouble(value).array())
-        }
+        fun f64(value: Double) = apply { out.f64(value) }
 
-        fun ascii(value: String) = apply { bytes(value.toByteArray(Charsets.ISO_8859_1)) }
+        fun ascii(value: String) = apply { out.latin1(value) }
 
         fun field(value: String, size: Int) = apply {
             val text = value.take(size - 1)
@@ -109,9 +103,9 @@ object FlmWriter {
             ascii(value)
         }
 
-        fun zeros(count: Int) = apply { repeat(count) { u8(0) } }
+        fun zeros(count: Int) = apply { out.zeros(count) }
 
-        fun bytes(value: ByteArray) = apply { out.write(value) }
+        fun bytes(value: ByteArray) = apply { out.bytes(value) }
 
         fun chunk(tag: String, payload: Payload) = apply {
             val content = payload.toByteArray()
@@ -123,7 +117,7 @@ object FlmWriter {
         fun toByteArray(): ByteArray = out.toByteArray()
     }
 
-    fun write(project: FlmProject, savedAt: LocalDateTime = LocalDateTime.now()): ByteArray {
+    fun write(project: FlmProject, savedAt: DateStamp = currentStamp()): ByteArray {
         val file = Payload()
             .ascii(MAGIC)
             .chunk("HEAD", head(project))
@@ -138,13 +132,12 @@ object FlmWriter {
     }
 
     fun asciiSafe(value: String): String {
-        val decomposed = Normalizer.normalize(value, Normalizer.Form.NFKD)
-        val builder = StringBuilder(decomposed.length)
-        for (character in decomposed) {
+        val builder = StringBuilder(value.length)
+        for (character in value) {
             when {
                 character.code in 0x20..0x7E -> builder.append(character)
-                Character.getType(character) == Character.NON_SPACING_MARK.toInt() -> Unit
-                else -> builder.append('_')
+                character.code in COMBINING_MARKS -> Unit
+                else -> builder.append(LATIN_FOLDS[character] ?: '_')
             }
         }
         return builder.toString().trim()
@@ -155,7 +148,6 @@ object FlmWriter {
 
     private fun head(project: FlmProject): Payload {
         val channelCount = project.tracks.size + 1
-        val uuid = UUID.randomUUID()
         return Payload()
             .u32(FILE_VERSION)
             .u32(0)
@@ -163,7 +155,7 @@ object FlmWriter {
             .f64(project.tempo)
             .zeros(32)
             .bytes(VIEW_TAIL)
-            .bytes(ByteBuffer.allocate(16).putLong(uuid.mostSignificantBits).putLong(uuid.leastSignificantBits).array())
+            .bytes(Random.nextBytes(16))
             .u32(channelCount + 1)
             .u32(0)
             .u8(1)
@@ -192,9 +184,9 @@ object FlmWriter {
             .zeros(5)
     }
 
-    private fun meta(project: FlmProject, savedAt: LocalDateTime): Payload {
-        val created = savedAt.format(CREATED_FORMAT)
-        val saved = savedAt.format(SAVED_FORMAT)
+    private fun meta(project: FlmProject, savedAt: DateStamp): Payload {
+        val created = savedAt.fileLabel()
+        val saved = savedAt.displayLabel()
         val title = safeName(project.title, "Untitled")
         val payload = Payload()
             .field(created, META_TITLE_OFFSET)

@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -74,7 +75,7 @@ fun LoadingScreen(state: ConverterState.Working, modifier: Modifier = Modifier) 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Image(
-                painter = LocalPlatform.current.mascot(),
+                painter = rememberVectorPainter(MascotIcon),
                 contentDescription = null,
                 modifier = Modifier
                     .size(170.dp)

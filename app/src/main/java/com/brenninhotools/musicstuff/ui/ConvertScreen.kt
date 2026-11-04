@@ -43,7 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.brenninhotools.musicstuff.flm.FlmTrack
 import com.brenninhotools.musicstuff.flp.FlpArrangement
-import java.util.Locale
+import kotlin.math.roundToLong
 
 private val EmptyPads = List(ACTIVITY_SLICES) { false }
 
@@ -238,7 +238,7 @@ private fun ProjectHeader(summary: ProjectSummary, direction: ConvertDirection) 
             horizontalArrangement = Arrangement.spacedBy(22.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Stat(String.format(Locale.US, "%.2f", summary.tempo), "BPM")
+            Stat(tempoLabel(summary.tempo), "BPM")
             Stat("${summary.timeSigNumerator}/${summary.timeSigDenominator}", "Time")
             Stat(summary.noteCount.toString(), "Notes")
             if (summary.sourceVersion.isNotEmpty()) Stat(summary.sourceVersion, direction.sourceApp)
@@ -348,4 +348,9 @@ private fun Notes(warnings: List<String>) {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+private fun tempoLabel(tempo: Double): String {
+    val hundredths = (tempo * 100).roundToLong()
+    return "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
 }

@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import com.brenninhotools.musicstuff.R
@@ -76,7 +75,6 @@ fun rememberAndroidPlatform(): AppPlatform {
                 saveCallback.value = onPicked
                 create.launch(name)
             },
-            mascot = { painterResource(R.drawable.ic_launcher_foreground) },
             backHandler = { enabled, onBack -> BackHandler(enabled, onBack) },
         )
     }

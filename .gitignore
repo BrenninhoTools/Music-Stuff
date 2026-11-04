@@ -34,3 +34,6 @@ local.properties
 *.iml
 *.apk
 *.aab
+
+iosApp/*.xcodeproj
+iosApp/build/
