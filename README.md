@@ -4,7 +4,7 @@ A Kotlin remake of Music Stuff for Android and Windows: convert FL Studio projec
 
 ## Features
 
-- **Converter:** reads an FL Studio Desktop `.flp` project and writes an FL Studio Mobile `.flm` project.
+- **Converter:** turns FL Studio Desktop `.flp` projects into FL Studio Mobile `.flm` projects, and `.flm` back into `.flp`.
 - **Generator:** makes drums, bass, chords and a melody from a style, key, tempo and length. Preview the song, shuffle any part, and save it as `.flm`.
 
 Everything runs on the device. Nothing is uploaded.
@@ -19,10 +19,11 @@ If the playlist has no pattern clips, patterns are placed one after another.
 
 ## Limitations
 
-- Image-Line doesn't publish the `.flm` format. The writer follows the layout of a real FL Studio Mobile 5.0.4 project, and it still needs testing in the app.
+- Image-Line doesn't publish these formats. The `.flm` code follows a real FL Studio Mobile 5.0.4 project and the `.flp` writer follows real FL Studio 20 projects, and both still need testing in the apps.
 - Plugins, samples, audio clips, automation and mixer settings aren't converted. Each channel starts with an empty DirectWave sampler, so you'll need to pick instruments again in FL Studio Mobile.
 - Slide notes become normal notes.
 - Channels without notes are left out.
+- FLM to FLP turns each clip into its own pattern, and FL Studio opens the project with empty Sampler channels and a default mixer.
 
 ## Credits
 

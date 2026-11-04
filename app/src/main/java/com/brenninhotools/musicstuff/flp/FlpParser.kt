@@ -269,11 +269,12 @@ class FlpParser private constructor(private val data: ByteArray) {
             val patternBase = buffer.getShort(offset + 4).toInt() and 0xFFFF
             val itemIndex = buffer.getShort(offset + 6).toInt() and 0xFFFF
             val length = buffer.getInt(offset + 8).toLong() and 0xFFFFFFFFL
-            val startOffset = buffer.getFloat(offset + 24)
+            val isPattern = itemIndex > patternBase
+            val startOffset = if (isPattern) buffer.getInt(offset + 24).toFloat() else buffer.getFloat(offset + 24)
             arrangement.clips += FlpClip(
                 position = position,
                 length = length,
-                patternIid = (itemIndex - patternBase).takeIf { itemIndex > patternBase },
+                patternIid = (itemIndex - patternBase).takeIf { isPattern },
                 startOffset = startOffset,
             )
         }

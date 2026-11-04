@@ -22,7 +22,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +41,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.brenninhotools.musicstuff.convert.FlmLayout
 import com.brenninhotools.musicstuff.flm.FlmTrack
 import com.brenninhotools.musicstuff.flp.FlpArrangement
 import java.util.Locale
@@ -53,29 +56,71 @@ private val DemoPads = listOf(
 @Composable
 fun ConvertScreen(
     state: ConverterState,
+    direction: ConvertDirection,
+    onDirection: (ConvertDirection) -> Unit,
     onPick: () -> Unit,
     onConvert: () -> Unit,
     onSelectArrangement: (FlpArrangement) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (state) {
-        ConverterState.Idle -> IdleScreen(onPick, null, modifier)
-        is ConverterState.Failed -> IdleScreen(onPick, state.message, modifier)
+        ConverterState.Idle -> IdleScreen(direction, onDirection, onPick, null, modifier)
+        is ConverterState.Failed -> IdleScreen(direction, onDirection, onPick, state.message, modifier)
         is ConverterState.Working -> LoadingScreen(state, modifier)
-        is ConverterState.Ready -> ReadyScreen(state, onPick, onConvert, onSelectArrangement, modifier)
+        is ConverterState.Ready -> ReadyScreen(state, direction, onDirection, onPick, onConvert, onSelectArrangement, modifier)
     }
 }
 
 @Composable
-private fun IdleScreen(onPick: () -> Unit, error: String?, modifier: Modifier) {
+private fun DirectionPicker(selected: ConvertDirection, onSelect: (ConvertDirection) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(4.dp)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ConvertDirection.entries.forEach { direction ->
+            val active = direction == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(if (active) Sun else MaterialTheme.colorScheme.surface)
+                    .selectable(selected = active, role = Role.RadioButton, onClick = { onSelect(direction) })
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = direction.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun IdleScreen(
+    direction: ConvertDirection,
+    onDirection: (ConvertDirection) -> Unit,
+    onPick: () -> Unit,
+    error: String?,
+    modifier: Modifier,
+) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             modifier = Modifier
                 .widthIn(max = 520.dp)
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            DirectionPicker(direction, onDirection)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -90,12 +135,17 @@ private fun IdleScreen(onPick: () -> Unit, error: String?, modifier: Modifier) {
                 }
             }
             Text(
-                text = "Bring a desktop project to your phone",
+                text = when (direction) {
+                    ConvertDirection.FLP_TO_FLM -> "Bring a desktop project to your phone"
+                    ConvertDirection.FLM_TO_FLP -> "Bring a phone project to your desktop"
+                },
                 style = MaterialTheme.typography.displaySmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "Choose an .flp and Music Stuff writes an .flm for FL Studio Mobile. It all happens on this device.",
+                text = "Choose an ${direction.source} and Music Stuff writes an ${direction.target} " +
+                    "for ${direction.targetApp}. " +
+                    "It all happens on this device.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -112,7 +162,7 @@ private fun IdleScreen(onPick: () -> Unit, error: String?, modifier: Modifier) {
                 contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Choose .flp file", style = MaterialTheme.typography.labelLarge)
+                Text("Choose ${direction.source} file", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
@@ -121,13 +171,15 @@ private fun IdleScreen(onPick: () -> Unit, error: String?, modifier: Modifier) {
 @Composable
 private fun ReadyScreen(
     state: ConverterState.Ready,
+    direction: ConvertDirection,
+    onDirection: (ConvertDirection) -> Unit,
     onPick: () -> Unit,
     onConvert: () -> Unit,
     onSelectArrangement: (FlpArrangement) -> Unit,
     modifier: Modifier,
 ) {
-    val end = state.conversion.project.endBeats()
-    val warnings = (state.project.warnings + state.conversion.warnings).distinct()
+    val summary = state.summary
+    val end = summary.preview.endBeats()
     BoxWithConstraints(modifier.fillMaxSize()) {
         if (maxWidth >= WIDE_LAYOUT) {
             Row(Modifier.fillMaxSize()) {
@@ -138,19 +190,21 @@ private fun ReadyScreen(
                     contentPadding = PaddingValues(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    item { ProjectHeader(state) }
-                    rack(state.conversion.project.tracks, end)
+                    item { ProjectHeader(summary, direction) }
+                    rack(summary.preview.tracks, end)
                 }
                 Column(
                     modifier = Modifier
                         .width(290.dp)
                         .fillMaxHeight()
                         .background(MaterialTheme.colorScheme.surface)
+                        .verticalScroll(rememberScrollState())
                         .padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Actions(state, onPick, onConvert, onSelectArrangement)
-                    Notes(warnings)
+                    DirectionPicker(direction, onDirection)
+                    Actions(state, direction, onPick, onConvert, onSelectArrangement)
+                    Notes(summary.warnings)
                 }
             }
         } else {
@@ -159,10 +213,11 @@ private fun ReadyScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item { ProjectHeader(state) }
-                item { Actions(state, onPick, onConvert, onSelectArrangement) }
-                rack(state.conversion.project.tracks, end)
-                if (warnings.isNotEmpty()) item { Notes(warnings) }
+                item { DirectionPicker(direction, onDirection) }
+                item { ProjectHeader(summary, direction) }
+                item { Actions(state, direction, onPick, onConvert, onSelectArrangement) }
+                rack(summary.preview.tracks, end)
+                if (summary.warnings.isNotEmpty()) item { Notes(summary.warnings) }
             }
         }
     }
@@ -170,11 +225,10 @@ private fun ReadyScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ProjectHeader(state: ConverterState.Ready) {
-    val project = state.project
+private fun ProjectHeader(summary: ProjectSummary, direction: ConvertDirection) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = project.title,
+            text = summary.title,
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onBackground,
             maxLines = 2,
@@ -184,10 +238,10 @@ private fun ProjectHeader(state: ConverterState.Ready) {
             horizontalArrangement = Arrangement.spacedBy(22.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Stat(String.format(Locale.US, "%.2f", project.tempo), "BPM")
-            Stat("${project.timeSigNumerator}/${project.timeSigDenominator}", "Time")
-            Stat(state.conversion.noteCount.toString(), "Notes")
-            if (project.version.isNotEmpty()) Stat(project.version.split('.').take(3).joinToString("."), "FL Studio")
+            Stat(String.format(Locale.US, "%.2f", summary.tempo), "BPM")
+            Stat("${summary.timeSigNumerator}/${summary.timeSigDenominator}", "Time")
+            Stat(summary.noteCount.toString(), "Notes")
+            if (summary.sourceVersion.isNotEmpty()) Stat(summary.sourceVersion, direction.sourceApp)
         }
     }
 }
@@ -222,17 +276,17 @@ private fun ChannelRow(track: FlmTrack, end: Double, color: Color) {
 @Composable
 private fun Actions(
     state: ConverterState.Ready,
+    direction: ConvertDirection,
     onPick: () -> Unit,
     onConvert: () -> Unit,
     onSelectArrangement: (FlpArrangement) -> Unit,
 ) {
-    val conversion = state.conversion
-    val arrangements = state.project.arrangements.filter { it.patternClips.isNotEmpty() }
+    val summary = state.summary
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (arrangements.size > 1) {
+        if (summary.arrangements.size > 1) {
             Text("Arrangement", style = MaterialTheme.typography.titleMedium)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                arrangements.forEach { arrangement ->
+                summary.arrangements.forEach { arrangement ->
                     FilterChip(
                         selected = arrangement.id == state.arrangement?.id,
                         onClick = { onSelectArrangement(arrangement) },
@@ -242,22 +296,18 @@ private fun Actions(
             }
         }
         Text(
-            text = when {
-                conversion.noteCount == 0 -> "This project has no notes to convert."
-                conversion.layout == FlmLayout.ARRANGEMENT -> "Notes are placed where the playlist puts them."
-                else -> "Patterns are placed one after another."
-            },
+            text = summary.placement,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Button(
             onClick = onConvert,
-            enabled = conversion.noteCount > 0,
+            enabled = summary.noteCount > 0,
             shape = RoundedCornerShape(14.dp),
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Convert to .flm", style = MaterialTheme.typography.labelLarge)
+            Text("Convert to ${direction.target}", style = MaterialTheme.typography.labelLarge)
         }
         OutlinedButton(
             onClick = onPick,
@@ -276,7 +326,7 @@ private fun Actions(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Saved. Pick instruments for each channel in FL Studio Mobile.",
+                    text = "Saved. Pick instruments for each channel in ${direction.targetApp}.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground,
                 )

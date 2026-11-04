@@ -11,8 +11,6 @@ import java.awt.Frame
 import java.io.File
 
 const val APP_VERSION = "0.0.2"
-private const val PROJECT_EXTENSION = ".flp"
-private const val OUTPUT_EXTENSION = ".flm"
 
 private class DiskProjectFile(private val file: File) : ProjectFile {
     override val name: String = file.name
@@ -20,27 +18,30 @@ private class DiskProjectFile(private val file: File) : ProjectFile {
     override fun read(): ByteArray = file.readBytes()
 }
 
-private fun chooseFile(owner: Frame?, title: String, mode: Int, name: String?): File? {
+private fun chooseFile(owner: Frame?, title: String, mode: Int, name: String, extension: String): File? {
     val dialog = FileDialog(owner, title, mode)
-    if (name != null) dialog.file = name
-    if (mode == FileDialog.LOAD) dialog.setFilenameFilter { _, file -> file.lowercase().endsWith(PROJECT_EXTENSION) }
+    dialog.file = name
+    dialog.setFilenameFilter { _, file -> file.lowercase().endsWith(extension) }
     dialog.isVisible = true
     val selected = dialog.file ?: return null
     return File(dialog.directory, selected)
 }
 
-private fun withExtension(file: File): File =
-    if (file.name.lowercase().endsWith(OUTPUT_EXTENSION)) file else File(file.parentFile, file.name + OUTPUT_EXTENSION)
+private fun withExtension(file: File, extension: String): File =
+    if (file.name.lowercase().endsWith(extension)) file else File(file.parentFile, file.name + extension)
 
 fun desktopPlatform(owner: () -> Frame?): AppPlatform = AppPlatform(
     font = FontFamily(Font(resource = "lilita_one.ttf")),
     version = APP_VERSION,
-    pickProject = { onPicked ->
-        chooseFile(owner(), "Choose an FL Studio project", FileDialog.LOAD, null)?.let { onPicked(DiskProjectFile(it)) }
+    pickProject = { extension, onPicked ->
+        chooseFile(owner(), "Choose a project", FileDialog.LOAD, "*$extension", extension)?.let {
+            onPicked(DiskProjectFile(it))
+        }
     },
     pickSaveTarget = { name, onPicked ->
-        chooseFile(owner(), "Save the FL Studio Mobile project", FileDialog.SAVE, name)?.let { file ->
-            onPicked(SaveTarget { bytes -> withExtension(file).writeBytes(bytes) })
+        val extension = "." + name.substringAfterLast('.')
+        chooseFile(owner(), "Save the project", FileDialog.SAVE, name, extension)?.let { file ->
+            onPicked(SaveTarget { bytes -> withExtension(file, extension).writeBytes(bytes) })
         }
     },
     mascot = { painterResource("ic_launcher_foreground.xml") },

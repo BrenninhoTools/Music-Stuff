@@ -18,6 +18,7 @@ import com.brenninhotools.musicstuff.generate.SongSettings
 import com.brenninhotools.musicstuff.ui.AboutScreen
 import com.brenninhotools.musicstuff.ui.AppScreen
 import com.brenninhotools.musicstuff.ui.AppShell
+import com.brenninhotools.musicstuff.ui.ConvertDirection
 import com.brenninhotools.musicstuff.ui.ConvertScreen
 import com.brenninhotools.musicstuff.ui.ConvertStage
 import com.brenninhotools.musicstuff.ui.ConverterState
@@ -26,6 +27,7 @@ import com.brenninhotools.musicstuff.ui.GeneratorScreen
 import com.brenninhotools.musicstuff.ui.GeneratorState
 import com.brenninhotools.musicstuff.ui.LocalPlatform
 import com.brenninhotools.musicstuff.ui.MusicStuffTheme
+import com.brenninhotools.musicstuff.ui.ProjectSummary
 import org.jetbrains.skia.EncodedImageFormat
 import org.junit.Test
 import java.io.File
@@ -62,11 +64,21 @@ class ScreensTest {
         warnings = listOf("3 audio or automation clip(s) were skipped. Only pattern notes are converted."),
     )
 
+    private val conversion = FlpToFlmConverter.convert(project)
+
     private val ready = ConverterState.Ready(
         fileName = "who-flp.flp",
-        project = project,
-        arrangement = project.arrangements.first(),
-        conversion = FlpToFlmConverter.convert(project),
+        summary = ProjectSummary(
+            title = project.title,
+            tempo = project.tempo,
+            timeSigNumerator = 4,
+            timeSigDenominator = 4,
+            sourceVersion = "26.1.6",
+            preview = conversion.project,
+            noteCount = conversion.noteCount,
+            placement = "Notes are placed where the playlist puts them.",
+            warnings = project.warnings,
+        ),
     )
 
     private val working = ConverterState.Working(
@@ -95,9 +107,16 @@ class ScreensTest {
 
     private fun screens(prefix: String, width: Int, height: Int) {
         val convert = @Composable { state: ConverterState ->
-            AppShell(AppScreen.CONVERTER, {}) { modifier -> ConvertScreen(state, {}, {}, {}, modifier) }
+            AppShell(AppScreen.CONVERTER, {}) { modifier ->
+                ConvertScreen(state, ConvertDirection.FLP_TO_FLM, {}, {}, {}, {}, modifier)
+            }
         }
         render("$prefix-idle", width, height) { convert(ConverterState.Idle) }
+        render("$prefix-idle-flm", width, height) {
+            AppShell(AppScreen.CONVERTER, {}) { modifier ->
+                ConvertScreen(ConverterState.Idle, ConvertDirection.FLM_TO_FLP, {}, {}, {}, {}, modifier)
+            }
+        }
         render("$prefix-failed", width, height) { convert(ConverterState.Failed("This is a .zip archive. Extract the .flp from it first.")) }
         render("$prefix-loading", width, height) { convert(working) }
         render("$prefix-ready", width, height) { convert(ready) }

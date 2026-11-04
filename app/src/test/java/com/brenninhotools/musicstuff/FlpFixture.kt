@@ -89,7 +89,7 @@ class FlpFixture(private val ppq: Int = 96) {
             position: Int,
             patternIid: Int,
             length: Int,
-            startOffset: Float = -1f,
+            startOffset: Int = -1,
             itemSize: Int = 32,
         ): ByteArray = le(itemSize)
             .putInt(position)
@@ -100,8 +100,8 @@ class FlpFixture(private val ppq: Int = 96) {
             .putShort(0)
             .putInt(0)
             .putInt(0)
-            .putFloat(startOffset)
-            .putFloat(-1f)
+            .putInt(startOffset)
+            .putInt(-1)
             .array()
 
         fun channelClip(position: Int, channelIid: Int, length: Int): ByteArray = le(32)

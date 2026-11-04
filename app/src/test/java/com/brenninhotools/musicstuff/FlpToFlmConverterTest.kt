@@ -36,7 +36,7 @@ class FlpToFlmConverterTest {
         val result = convert(
             channels()
                 .word(65, 1).notes(note(0, 24, 60), note(48, 96, 62), note(192, 24, 64))
-                .word(99, 0).data(233, clip(0, 1, 96, startOffset = 24f, itemSize = 60)),
+                .word(99, 0).data(233, clip(0, 1, 96, startOffset = 24, itemSize = 60)),
         )
         val notes = result.project.tracks[0].notes
         assertEquals(1, notes.size)
@@ -49,7 +49,7 @@ class FlpToFlmConverterTest {
         val result = convert(
             channels()
                 .word(65, 1).notes(note(0, 24, 60))
-                .word(99, 0).data(233, clip(96, 1, 96, startOffset = Float.NaN, itemSize = 60)),
+                .word(99, 0).data(233, clip(96, 1, 96, startOffset = -1, itemSize = 60)),
         )
         assertEquals(1.0, result.project.tracks[0].notes.single().positionBeats, 0.0001)
     }

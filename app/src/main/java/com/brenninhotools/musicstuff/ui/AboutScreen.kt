@@ -32,11 +32,11 @@ private val Generator = listOf(
 private val Converted = listOf(
     "Title, tempo and time signature",
     "Channels that have notes, with their names",
-    "Pattern notes, placed where the playlist puts them",
+    "Notes, placed where the playlist puts them, in both directions",
 )
 
 private val NotConverted = listOf(
-    "Plugins and samples, so you'll pick instruments again in FL Studio Mobile",
+    "Plugins and samples, so you'll pick instruments again in the other app",
     "Audio clips and automation",
     "Mixer settings",
     "Slides, which become normal notes",
@@ -71,7 +71,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
             item { ListPanel("What doesn't convert", NotConverted, Pink) }
             item {
                 Text(
-                    text = "The .flm format isn't published, so the writer follows a real FL Studio Mobile project. " +
+                    text = "The .flp and .flm formats aren't published, so reading and writing them follows real projects. " +
                         "Some projects may not open the way you expect.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

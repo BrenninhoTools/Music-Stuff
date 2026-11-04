@@ -22,7 +22,7 @@ interface AudioPlayer {
 class AppPlatform(
     val font: FontFamily,
     val version: String?,
-    val pickProject: (onPicked: (ProjectFile) -> Unit) -> Unit,
+    val pickProject: (extension: String, onPicked: (ProjectFile) -> Unit) -> Unit,
     val pickSaveTarget: (suggestedName: String, onPicked: (SaveTarget) -> Unit) -> Unit,
     val mascot: @Composable () -> Painter,
     val backHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit,

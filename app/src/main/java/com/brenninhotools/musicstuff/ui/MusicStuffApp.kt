@@ -49,6 +49,7 @@ enum class AppScreen(val label: String) {
 fun MusicStuffApp(converter: ConverterController, generator: GeneratorController) {
     val platform = LocalPlatform.current
     val converterState by converter.state.collectAsState()
+    val direction by converter.direction.collectAsState()
     val generatorState by generator.state.collectAsState()
     var screen by rememberSaveable { mutableStateOf(AppScreen.CONVERTER) }
     platform.backHandler(screen != AppScreen.CONVERTER) { screen = AppScreen.CONVERTER }
@@ -80,10 +81,14 @@ fun MusicStuffApp(converter: ConverterController, generator: GeneratorController
         when (screen) {
             AppScreen.CONVERTER -> ConvertScreen(
                 state = converterState,
-                onPick = { platform.pickProject(converter::open) },
+                direction = direction,
+                onDirection = converter::setDirection,
+                onPick = { platform.pickProject(direction.source, converter::open) },
                 onConvert = {
                     val current = converterState as? ConverterState.Ready
-                    if (current != null) platform.pickSaveTarget(flmFileName(current.fileName), converter::save)
+                    if (current != null) {
+                        platform.pickSaveTarget(outputFileName(current.fileName, direction.target), converter::save)
+                    }
                 },
                 onSelectArrangement = converter::selectArrangement,
                 modifier = modifier,
@@ -210,5 +215,5 @@ private fun NavItem(item: AppScreen, selected: Boolean, modifier: Modifier, onCl
     }
 }
 
-fun flmFileName(fileName: String): String =
-    fileName.substringBeforeLast('.', fileName).ifEmpty { "project" } + ".flm"
+fun outputFileName(fileName: String, extension: String): String =
+    fileName.substringBeforeLast('.', fileName).ifEmpty { "project" } + extension

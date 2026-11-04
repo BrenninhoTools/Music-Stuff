@@ -68,4 +68,5 @@ data class FlpClip(
     val length: Long,
     val patternIid: Int?,
     val startOffset: Float,
+    val track: Int = 0,
 )

@@ -68,7 +68,7 @@ fun rememberAndroidPlatform(): AppPlatform {
         AppPlatform(
             font = FontFamily(Font(R.font.lilita_one)),
             version = version,
-            pickProject = { onPicked ->
+            pickProject = { _, onPicked ->
                 openCallback.value = onPicked
                 open.launch(arrayOf("*/*"))
             },
