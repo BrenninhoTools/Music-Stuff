@@ -1,8 +1,6 @@
 package com.brenninhotools.musicstuff.desktop
 
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.res.painterResource
@@ -11,6 +9,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.brenninhotools.musicstuff.ui.ConverterController
+import com.brenninhotools.musicstuff.ui.GeneratorController
 import com.brenninhotools.musicstuff.ui.LocalPlatform
 import com.brenninhotools.musicstuff.ui.MusicStuffApp
 import com.brenninhotools.musicstuff.ui.MusicStuffTheme
@@ -29,11 +28,11 @@ fun main() = application {
         window.minimumSize = Dimension(MIN_WIDTH, MIN_HEIGHT)
         val platform = remember { desktopPlatform { window } }
         val scope = rememberCoroutineScope()
-        val controller = remember { ConverterController(scope) }
-        val state by controller.state.collectAsState()
+        val converter = remember { ConverterController(scope) }
+        val generator = remember { GeneratorController(scope, { platform.audio }) }
         CompositionLocalProvider(LocalPlatform provides platform) {
             MusicStuffTheme(platform.font) {
-                MusicStuffApp(state, controller)
+                MusicStuffApp(converter, generator)
             }
         }
     }

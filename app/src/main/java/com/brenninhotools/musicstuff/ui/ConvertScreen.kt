@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -206,33 +207,14 @@ private fun LazyListScope.rack(tracks: List<FlmTrack>, end: Double) {
 }
 
 @Composable
-private fun ChannelRow(track: FlmTrack, end: Double, color: androidx.compose.ui.graphics.Color) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = track.name,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = if (track.notes.size == 1) "1 note" else "${track.notes.size} notes",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        PadRow(track.activity(end).ifEmpty { EmptyPads }, color, ratio = 1.15f)
+private fun ChannelRow(track: FlmTrack, end: Double, color: Color) {
+    ChannelPanel(track.name, track.activity(end).ifEmpty { EmptyPads }, color) {
+        Text(
+            text = if (track.notes.size == 1) "1 note" else "${track.notes.size} notes",
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

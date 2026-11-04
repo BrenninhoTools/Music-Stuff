@@ -22,8 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -34,36 +36,59 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.brenninhotools.musicstuff.flp.FlpArrangement
 
 val WIDE_LAYOUT: Dp = 720.dp
 
 enum class AppScreen(val label: String) {
-    CONVERT("Convert"),
+    CONVERTER("Converter"),
+    GENERATOR("Generator"),
     ABOUT("About"),
 }
 
 @Composable
-fun MusicStuffApp(controllerState: ConverterState, controller: ConverterController?) {
+fun MusicStuffApp(converter: ConverterController, generator: GeneratorController) {
     val platform = LocalPlatform.current
-    var screen by rememberSaveable { mutableStateOf(AppScreen.CONVERT) }
-    platform.backHandler(screen != AppScreen.CONVERT) { screen = AppScreen.CONVERT }
+    val converterState by converter.state.collectAsState()
+    val generatorState by generator.state.collectAsState()
+    var screen by rememberSaveable { mutableStateOf(AppScreen.CONVERTER) }
+    platform.backHandler(screen != AppScreen.CONVERTER) { screen = AppScreen.CONVERTER }
 
-    val onPick = { platform.pickProject { file -> controller?.open(file) } }
-    val onConvert = {
-        val current = controllerState as? ConverterState.Ready
-        if (current != null) {
-            platform.pickSaveTarget(flmFileName(current.fileName)) { target -> controller?.save(target) }
-        }
+    val generatorActions = remember(generator, platform) {
+        GeneratorActions(
+            onStyle = generator::setStyle,
+            onRoot = generator::setRoot,
+            onBpm = generator::setBpm,
+            onBars = generator::setBars,
+            onNewSong = generator::newSong,
+            onShuffle = generator::shuffle,
+            onTogglePlayback = generator::togglePlayback,
+            onSave = {
+                platform.pickSaveTarget(songFileName(generator.state.value.song.settings)) { target ->
+                    generator.save(target)
+                }
+            },
+        )
     }
-    val onSelect = { arrangement: FlpArrangement -> controller?.selectArrangement(arrangement) ?: Unit }
 
     AppShell(
         screen = screen,
-        onSelectScreen = { screen = it },
+        onSelectScreen = {
+            if (it != AppScreen.GENERATOR) generator.stop()
+            screen = it
+        },
     ) { modifier ->
         when (screen) {
-            AppScreen.CONVERT -> ConvertScreen(controllerState, onPick, onConvert, onSelect, modifier)
+            AppScreen.CONVERTER -> ConvertScreen(
+                state = converterState,
+                onPick = { platform.pickProject(converter::open) },
+                onConvert = {
+                    val current = converterState as? ConverterState.Ready
+                    if (current != null) platform.pickSaveTarget(flmFileName(current.fileName), converter::save)
+                },
+                onSelectArrangement = converter::selectArrangement,
+                modifier = modifier,
+            )
+            AppScreen.GENERATOR -> GeneratorScreen(generatorState, generatorActions, modifier)
             AppScreen.ABOUT -> AboutScreen(modifier)
         }
     }

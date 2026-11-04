@@ -13,12 +13,17 @@ import com.brenninhotools.musicstuff.flp.FlpClip
 import com.brenninhotools.musicstuff.flp.FlpNote
 import com.brenninhotools.musicstuff.flp.FlpPattern
 import com.brenninhotools.musicstuff.flp.FlpProject
+import com.brenninhotools.musicstuff.generate.SongGenerator
+import com.brenninhotools.musicstuff.generate.SongSettings
 import com.brenninhotools.musicstuff.ui.AboutScreen
 import com.brenninhotools.musicstuff.ui.AppScreen
 import com.brenninhotools.musicstuff.ui.AppShell
 import com.brenninhotools.musicstuff.ui.ConvertScreen
 import com.brenninhotools.musicstuff.ui.ConvertStage
 import com.brenninhotools.musicstuff.ui.ConverterState
+import com.brenninhotools.musicstuff.ui.GeneratorActions
+import com.brenninhotools.musicstuff.ui.GeneratorScreen
+import com.brenninhotools.musicstuff.ui.GeneratorState
 import com.brenninhotools.musicstuff.ui.LocalPlatform
 import com.brenninhotools.musicstuff.ui.MusicStuffTheme
 import org.jetbrains.skia.EncodedImageFormat
@@ -70,6 +75,10 @@ class ScreensTest {
         current = ConvertStage.WRITING,
     )
 
+    private val generated = GeneratorState(SongGenerator.generate(SongSettings(seed = 2026)))
+
+    private val actions = GeneratorActions({}, {}, {}, {}, {}, {}, {}, {})
+
     private fun render(name: String, width: Int, height: Int, content: @Composable () -> Unit) {
         val output = File("build/screens/$name.png")
         output.parentFile.mkdirs()
@@ -86,13 +95,19 @@ class ScreensTest {
 
     private fun screens(prefix: String, width: Int, height: Int) {
         val convert = @Composable { state: ConverterState ->
-            AppShell(AppScreen.CONVERT, {}) { modifier -> ConvertScreen(state, {}, {}, {}, modifier) }
+            AppShell(AppScreen.CONVERTER, {}) { modifier -> ConvertScreen(state, {}, {}, {}, modifier) }
         }
         render("$prefix-idle", width, height) { convert(ConverterState.Idle) }
         render("$prefix-failed", width, height) { convert(ConverterState.Failed("This is a .zip archive. Extract the .flp from it first.")) }
         render("$prefix-loading", width, height) { convert(working) }
         render("$prefix-ready", width, height) { convert(ready) }
         render("$prefix-saved", width, height) { convert(ready.copy(saved = true)) }
+        render("$prefix-generator", width, height) {
+            AppShell(AppScreen.GENERATOR, {}) { modifier -> GeneratorScreen(generated, actions, modifier) }
+        }
+        render("$prefix-generator-saving", width, height) {
+            AppShell(AppScreen.GENERATOR, {}) { modifier -> GeneratorScreen(generated.copy(saving = true), actions, modifier) }
+        }
         render("$prefix-about", width, height) {
             AppShell(AppScreen.ABOUT, {}) { modifier -> AboutScreen(modifier) }
         }

@@ -23,6 +23,12 @@ import androidx.compose.ui.unit.dp
 
 private const val SOURCE_URL = "https://github.com/BrenninhoTools/Music-Stuff"
 
+private val Generator = listOf(
+    "Makes drums, bass, chords and a melody in the style and key you pick",
+    "Shuffle one part at a time until the song sounds right",
+    "The preview uses simple sounds. In FL Studio Mobile, you pick the real instruments",
+)
+
 private val Converted = listOf(
     "Title, tempo and time signature",
     "Channels that have notes, with their names",
@@ -60,6 +66,7 @@ fun AboutScreen(modifier: Modifier = Modifier) {
                     }
                 }
             }
+            item { ListPanel("Generator", Generator, Sun) }
             item { ListPanel("What converts", Converted, Cyan) }
             item { ListPanel("What doesn't convert", NotConverted, Pink) }
             item {

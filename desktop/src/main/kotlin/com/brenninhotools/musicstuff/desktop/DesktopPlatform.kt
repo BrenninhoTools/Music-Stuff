@@ -35,6 +35,7 @@ private fun withExtension(file: File): File =
 fun desktopPlatform(owner: () -> Frame?): AppPlatform = AppPlatform(
     font = FontFamily(Font(resource = "lilita_one.ttf")),
     version = APP_VERSION,
+    audio = DesktopAudioPlayer(),
     pickProject = { onPicked ->
         chooseFile(owner(), "Choose an FL Studio project", FileDialog.LOAD, null)?.let { onPicked(DiskProjectFile(it)) }
     },

@@ -1,10 +1,11 @@
 # Music Stuff
 
-A Kotlin remake of Music Stuff for Android: tools for moving FL Studio projects between desktop and mobile.
+A Kotlin remake of Music Stuff for Android and Windows: convert FL Studio projects and generate new songs for FL Studio Mobile.
 
 ## Features
 
-- **FLP to FLM converter:** reads an FL Studio Desktop `.flp` project and writes an FL Studio Mobile `.flm` project.
+- **Converter:** reads an FL Studio Desktop `.flp` project and writes an FL Studio Mobile `.flm` project.
+- **Generator:** makes drums, bass, chords and a melody from a style, key, tempo and length. Preview the song, shuffle any part, and save it as `.flm`.
 
 Everything runs on the device. Nothing is uploaded.
 
@@ -29,11 +30,13 @@ Headings use [Lilita One](https://fonts.google.com/specimen/Lilita+One) by Juan 
 
 ## Building
 
-Requires JDK 17 and the Android SDK.
+Requires JDK 17. The Android build also needs the Android SDK.
 
 ```sh
-./gradlew :app:testDebugUnitTest
-./gradlew :app:assembleDebug
+./gradlew :app:testDebugUnitTest -Pmusicstuff.modules=app
+./gradlew :app:assembleDebug -Pmusicstuff.modules=app
+./gradlew :desktop:run -Pmusicstuff.modules=desktop
+./gradlew :desktop:packageExe -Pmusicstuff.modules=desktop
 ```
 
-GitHub Actions builds the debug APK on every push and uploads it as the `Music Stuff-Android` artifact.
+GitHub Actions builds on every push and uploads `Music Stuff-Android`, `Music Stuff-Windows` and rendered `Music Stuff-Screens` artifacts.
