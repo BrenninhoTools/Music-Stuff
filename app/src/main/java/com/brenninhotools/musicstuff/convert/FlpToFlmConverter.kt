@@ -22,6 +22,7 @@ data class FlmConversion(
 
 object FlpToFlmConverter {
     private const val OCTAVE = 12
+    private const val STEP_NOTE_BEATS = 0.25
     private const val WHOLE_NOTE_BEATS = 4L
 
     private data class PlacedNote(val position: Long, val note: FlpNote)
@@ -45,28 +46,20 @@ object FlpToFlmConverter {
         val orphanNotes = positions.filterKeys { it !in writableIds }.values.sumOf { it.size }
         if (orphanNotes > 0) warnings += "$orphanNotes note(s) point to a channel that can't be written and were skipped."
 
-        var beyondLimit = 0
         var transposed = 0
         val usedNames = mutableSetOf(FlmWriter.MASTER_NAME)
-        val tracks = writableChannels.map { channel ->
+        val tracks = writableChannels.mapNotNull { channel ->
             val notes = positions[channel.iid].orEmpty()
                 .sortedWith(compareBy({ it.position }, { it.note.key }))
-                .mapNotNull { placedNote ->
-                    val beats = placedNote.position / ticksPerBeat
-                    if (beats >= FlmWriter.MAX_POSITION_BEATS) {
-                        beyondLimit++
-                        return@mapNotNull null
-                    }
+                .map { placedNote ->
                     if (placedNote.note.key > FlmWriter.MAX_KEY) transposed++
-                    toFlmNote(placedNote.note, beats, ticksPerBeat)
+                    toFlmNote(placedNote.note, placedNote.position / ticksPerBeat, ticksPerBeat)
                 }
-            FlmTrack(uniqueName(channel.name, usedNames), notes)
+            if (notes.isEmpty()) null else FlmTrack(uniqueName(channel.name, usedNames), notes)
         }
 
-        if (beyondLimit > 0) {
-            val limit = FlmWriter.MAX_POSITION_BEATS.toInt()
-            warnings += "$beyondLimit note(s) start after beat $limit, the furthest position .flm notes can store, and were skipped."
-        }
+        val slides = placed.count { it.note.slide }
+        if (slides > 0) warnings += "$slides slide note(s) were written as normal notes."
         if (transposed > 0) warnings += "$transposed note(s) were above key ${FlmWriter.MAX_KEY} and were moved down an octave."
 
         return FlmConversion(
@@ -132,11 +125,10 @@ object FlpToFlmConverter {
         while (key > FlmWriter.MAX_KEY) key -= OCTAVE
         return FlmNote(
             positionBeats = beats,
-            lengthBeats = note.length / ticksPerBeat,
+            lengthBeats = if (note.length > 0L) note.length / ticksPerBeat else STEP_NOTE_BEATS,
             key = key,
             velocity = note.velocity,
             release = note.release,
-            slide = note.slide,
         )
     }
 

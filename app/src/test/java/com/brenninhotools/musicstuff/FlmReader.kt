@@ -5,9 +5,13 @@ import java.nio.ByteOrder
 
 data class ReadChunk(val tag: String, val start: Int, val end: Int)
 
-data class ReadNote(val beats: Double, val lengthBeats: Float, val key: Int, val velocity: Int, val slide: Boolean)
+data class ReadNote(val position: Int, val lengthBeats: Double, val key: Int, val velocity: Int, val release: Int)
 
-data class ReadChannel(val name: String, val notes: List<ReadNote>)
+data class ReadClip(val position: Int, val contentBeats: Double, val loopBeats: Double, val id: Int, val notes: List<ReadNote>)
+
+data class ReadChannel(val name: String, val clips: List<ReadClip>) {
+    val notes: List<ReadNote> get() = clips.flatMap { it.notes }
+}
 
 class FlmReader(private val data: ByteArray) {
     private val buffer = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
@@ -18,7 +22,7 @@ class FlmReader(private val data: ByteArray) {
         while (offset < end) {
             check(offset + 8 <= end) { "Truncated chunk header at $offset" }
             val tag = String(data, offset, 4, Charsets.ISO_8859_1)
-            check(tag.all { it in 'A'..'Z' || it in '0'..'9' }) { "Bad tag '$tag' at $offset" }
+            check(tag.all { it.isLetterOrDigit() }) { "Bad tag '$tag' at $offset" }
             val size = buffer.getInt(offset + 4)
             val payload = offset + 8
             check(size >= 0 && payload + size <= end) { "Chunk $tag overruns its parent" }
@@ -37,35 +41,56 @@ class FlmReader(private val data: ByteArray) {
         return data[chunk.start].toInt() to data[chunk.start + 1].toInt()
     }
 
+    fun racks(): List<List<String>> = chunks().filter { it.tag == "RACK" }.map { rack ->
+        check(String(data, rack.start + 4, 4, Charsets.ISO_8859_1) == "10KR")
+        chunks(rack.start + 8, rack.end).map { it.tag }
+    }
+
+    fun channelHeaderSizes(): List<Int> = chunks().filter { it.tag == "CHNL" }.map { channel ->
+        chunks(channel.start + 8, channel.end).first { it.tag == "CHHD" }.let { it.end - it.start }
+    }
+
     fun channels(): List<ReadChannel> = chunks().filter { it.tag == "CHNL" }.map(::channel)
 
     private fun channel(chunk: ReadChunk): ReadChannel {
-        val name = terminated(chunk.start + 16)
-        val tracks = chunks(chunk.start + 16 + name.length + 1, chunk.end).single { it.tag == "TRKH" }
-        val notes = chunks(tracks.start, tracks.end).filter { it.tag == "CLIP" }.flatMap { clip ->
-            val events = chunks(clip.start + 4, clip.end).single { it.tag == "EVN2" }
-            notes(events)
-        }
-        return ReadChannel(name, notes)
+        check(String(data, chunk.start + 4, 4, Charsets.ISO_8859_1) == "20HC")
+        val parts = chunks(chunk.start + 8, chunk.end)
+        val header = parts.first { it.tag == "CHHD" }
+        val tracks = parts.filter { it.tag == "TRKH" }
+        val clips = tracks.flatMap { track -> chunks(track.start, track.end).filter { it.tag == "CLIP" } }.map(::clip)
+        return ReadChannel(terminated(header.start), clips)
+    }
+
+    private fun clip(chunk: ReadChunk): ReadClip {
+        check(String(data, chunk.start + 4, 4, Charsets.ISO_8859_1) == "20LC")
+        val parts = chunks(chunk.start + 8, chunk.end)
+        val header = parts.first { it.tag == "CLHd" }
+        check(header.end - header.start == 37)
+        check(parts.first { it.tag == "ZOOM" }.let { it.end - it.start } == 32)
+        val events = parts.first { it.tag == "EVN2" }
+        return ReadClip(
+            position = buffer.getInt(chunk.start),
+            contentBeats = buffer.getDouble(header.start),
+            loopBeats = buffer.getDouble(header.start + 8),
+            id = buffer.getInt(header.start + 24),
+            notes = notes(events),
+        )
     }
 
     private fun notes(chunk: ReadChunk): List<ReadNote> {
-        check(buffer.getInt(chunk.start) == 20)
-        val count = (chunk.end - chunk.start - 4 - 18) / 20
-        return (0 until count).map { index ->
-            val offset = chunk.start + 4 + index * 20
-            val raw = u8(offset + 17) or (u8(offset + 18) shl 8) or (u8(offset + 19) shl 16)
+        check(buffer.getShort(chunk.start).toInt() == 20)
+        check((chunk.end - chunk.start - 2) % 20 == 0)
+        return (0 until (chunk.end - chunk.start - 2) / 20).map { index ->
+            val offset = chunk.start + 2 + index * 20
             ReadNote(
-                beats = raw / 16384.0,
-                lengthBeats = buffer.getFloat(offset + 6),
-                key = u8(offset + 10),
-                velocity = buffer.getShort(offset + 12).toInt() and 0xFFFF,
-                slide = u8(offset + 16) and 0x08 != 0,
+                position = buffer.getInt(offset),
+                lengthBeats = buffer.getDouble(offset + 4),
+                key = buffer.getShort(offset + 12).toInt() and 0xFFFF,
+                velocity = buffer.getShort(offset + 14).toInt() and 0xFFFF,
+                release = buffer.getShort(offset + 16).toInt() and 0xFFFF,
             )
         }
     }
-
-    private fun u8(offset: Int): Int = data[offset].toInt() and 0xFF
 
     private fun terminated(start: Int): String {
         var end = start

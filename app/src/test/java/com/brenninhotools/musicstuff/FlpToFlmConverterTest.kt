@@ -74,18 +74,32 @@ class FlpToFlmConverterTest {
                 .word(65, 1).notes(note(0, 96, 60))
                 .word(99, 0).data(233, clip(0, 1, 96) + FlpFixture.channelClip(0, 1, 96)),
         )
-        assertEquals(listOf("Kick", "Bass"), result.project.tracks.map { it.name })
+        assertEquals(listOf("Kick"), result.project.tracks.map { it.name })
         assertTrue(result.warnings.any { it.contains("1 audio or automation clip") })
     }
 
     @Test
-    fun reportsNotesPastThePositionLimit() {
-        val result = convert(
-            channels()
-                .word(65, 1).notes(note(0, 96, 60), note(96 * 1024, 96, 60)),
-        )
-        assertEquals(1, result.noteCount)
-        assertTrue(result.warnings.any { it.contains("start after beat 1023") })
+    fun keepsNotesLateInLongSongs() {
+        val result = convert(channels().word(65, 1).notes(note(0, 96, 60), note(96 * 4096, 96, 60)))
+        assertEquals(2, result.noteCount)
+    }
+
+    @Test
+    fun stepNotesWithoutLengthBecomeSixteenths() {
+        val result = convert(channels().word(65, 1).notes(note(96, 0, 60)))
+        assertEquals(0.25, result.project.tracks.single().notes.single().lengthBeats, 0.0)
+    }
+
+    @Test
+    fun reportsSlideNotes() {
+        val result = convert(channels().word(65, 1).notes(note(0, 96, 60, slide = true)))
+        assertTrue(result.warnings.any { it.contains("1 slide note") })
+    }
+
+    @Test
+    fun leavesOutChannelsWithoutNotes() {
+        val result = convert(channels().word(65, 1).notes(note(0, 96, 60)))
+        assertEquals(listOf("Kick"), result.project.tracks.map { it.name })
     }
 
     @Test
@@ -107,7 +121,9 @@ class FlpToFlmConverterTest {
 
     @Test
     fun aChannelCalledMasterDoesNotCollide() {
-        val result = convert(FlpFixture().version("21.0.0").word(64, 0).text(203, "Master"))
+        val result = convert(
+            FlpFixture().version("21.0.0").word(64, 0).text(203, "Master").word(65, 1).notes(note(0, 96, 60)),
+        )
         assertEquals("Master 2", result.project.tracks.single().name)
         assertEquals(listOf(FlmWriter.MASTER_NAME, "Master 2"), FlmReader(FlmWriter.write(result.project)).channels().map { it.name })
     }

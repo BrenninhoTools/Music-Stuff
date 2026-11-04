@@ -12,15 +12,16 @@ Everything runs on the device. Nothing is uploaded.
 
 - Title, tempo and time signature
 - Instrument channels and their names
-- Pattern notes (position, length, key, velocity, release, slide), placed where the playlist puts them
+- Pattern notes (position, length, key, velocity, release), placed where the playlist puts them
 
 If the playlist has no pattern clips, patterns are placed one after another.
 
 ## Limitations
 
-- Image-Line doesn't publish the `.flm` format. The writer is based on reverse-engineering, and it still needs testing in FL Studio Mobile.
-- Plugins, samples, audio clips, automation and mixer settings aren't converted. You'll need to pick instruments again in FL Studio Mobile.
-- `.flm` notes can start up to beat 1023. Anything later is skipped, and the app tells you how many notes were affected.
+- Image-Line doesn't publish the `.flm` format. The writer follows the layout of a real FL Studio Mobile 5.0.4 project, and it still needs testing in the app.
+- Plugins, samples, audio clips, automation and mixer settings aren't converted. Each channel starts with an empty DirectWave sampler, so you'll need to pick instruments again in FL Studio Mobile.
+- Slide notes become normal notes.
+- Channels without notes are left out.
 
 ## Credits
 

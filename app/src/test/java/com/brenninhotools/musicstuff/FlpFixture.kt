@@ -34,6 +34,11 @@ class FlpFixture(private val ppq: Int = 96) {
         events.write(value)
     }
 
+    fun raw(id: Int, vararg bytes: Int) = apply {
+        events.write(id)
+        bytes.forEach(events::write)
+    }
+
     fun text(id: Int, value: String) = data(id, (value + "\u0000").toByteArray(Charsets.UTF_16LE))
 
     fun version(value: String) = data(199, (value + "\u0000").toByteArray(Charsets.US_ASCII))

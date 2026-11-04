@@ -16,6 +16,7 @@ internal object FlpEvents {
     const val ARRANGEMENT_NEW = 99
 
     const val TEMPO = 156
+    const val SHORT_DWORD = 172
 
     const val CHANNEL_NAME_LEGACY = 192
     const val PATTERN_NAME = 193

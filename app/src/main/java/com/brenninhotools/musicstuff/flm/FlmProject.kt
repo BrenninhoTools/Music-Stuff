@@ -19,5 +19,4 @@ data class FlmNote(
     val key: Int,
     val velocity: Int,
     val release: Int,
-    val slide: Boolean,
 )

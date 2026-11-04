@@ -98,6 +98,44 @@ class FlpParserTest {
         val items = (1..5).map { clip(it * 96, it, 96, itemSize = 60) }.reduce(ByteArray::plus)
         val new = FlpParser.parse(FlpFixture().version("24.1.1").word(99, 0).data(233, items).build())
         assertEquals(listOf(1, 2, 3, 4, 5), new.arrangements.single().clips.map { it.patternIid })
+
+        val fl26 = (1..15).map { clip(it * 96, it, 96, itemSize = 88) }.reduce(ByteArray::plus)
+        val newest = FlpParser.parse(FlpFixture().version("26.1.6").word(99, 0).data(233, fl26).build())
+        assertEquals((1..15).toList(), newest.arrangements.single().clips.map { it.patternIid })
+    }
+
+    @Test
+    fun itemSizeIsNotConfusedWhenSeveralSizesDivideTheBlock() {
+        val items = (1..15).map { clip(it * 96, it, 96, itemSize = 32) }.reduce(ByteArray::plus)
+        val project = FlpParser.parse(FlpFixture().version("21.0.0").word(99, 0).data(233, items).build())
+        assertEquals((1..15).toList(), project.arrangements.single().clips.map { it.patternIid })
+    }
+
+    @Test
+    fun readsProjectsWhereEvent172HasThreeBytes() {
+        val project = FlpParser.parse(
+            FlpFixture().version("26.1.6")
+                .raw(172, 1, 1, 0)
+                .text(194, "After")
+                .dword(156, 162000)
+                .word(64, 0).text(203, "Lead")
+                .word(65, 1).notes(note(48, 24, 60))
+                .raw(172, 0, 1, 0)
+                .build(),
+        )
+        assertEquals("After", project.title)
+        assertEquals(162.0, project.tempo, 0.0001)
+        assertEquals("Lead", project.channels.single().name)
+        assertEquals(1, project.noteCount)
+        assertTrue(project.warnings.isEmpty())
+    }
+
+    @Test
+    fun keepsFourByteEvent172InOlderProjects() {
+        val project = FlpParser.parse(
+            FlpFixture().version("20.8.4").dword(172, 5).text(194, "Old").build(),
+        )
+        assertEquals("Old", project.title)
     }
 
     @Test

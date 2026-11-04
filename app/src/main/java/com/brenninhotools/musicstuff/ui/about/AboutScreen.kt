@@ -34,7 +34,7 @@ private val NotConverted = listOf(
     "Plugins and samples, so you'll pick instruments again in FL Studio Mobile",
     "Audio clips and automation",
     "Mixer settings",
-    "Notes that start after beat 1023",
+    "Slides, which become normal notes",
 )
 
 @Composable

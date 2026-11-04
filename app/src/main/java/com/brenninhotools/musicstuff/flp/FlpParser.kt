@@ -45,9 +45,11 @@ class FlpParser private constructor(private val data: ByteArray) {
     private var currentPattern: PatternDraft? = null
     private var currentArrangement: ArrangementDraft? = null
     private var inMixer = false
+    private var event172Size = DWORD_SIZE
 
     private fun parse(): FlpProject {
         val eventsEnd = readHeader()
+        event172Size = detectEvent172Size(buffer.position(), eventsEnd)
         while (buffer.position() < eventsEnd) {
             if (!readEvent(eventsEnd)) break
         }
@@ -83,14 +85,16 @@ class FlpParser private constructor(private val data: ByteArray) {
         val fixedSize = when {
             id < FlpEvents.WORD_START -> 1
             id < FlpEvents.DWORD_START -> 2
-            id < FlpEvents.TEXT_START -> 4
+            id == FlpEvents.SHORT_DWORD -> event172Size
+            id < FlpEvents.TEXT_START -> DWORD_SIZE
             else -> 0
         }
         if (fixedSize > remaining) return truncated()
-        when (fixedSize) {
-            1 -> onByte(id, buffer.get().toInt() and 0xFF)
-            2 -> onWord(id, buffer.getShort().toInt() and 0xFFFF)
-            4 -> onDword(id, buffer.getInt().toLong() and 0xFFFFFFFFL)
+        when {
+            fixedSize == 1 -> onByte(id, buffer.get().toInt() and 0xFF)
+            fixedSize == 2 -> onWord(id, buffer.getShort().toInt() and 0xFFFF)
+            id == FlpEvents.SHORT_DWORD -> buffer.position(buffer.position() + fixedSize)
+            fixedSize == DWORD_SIZE -> onDword(id, buffer.getInt().toLong() and 0xFFFFFFFFL)
             else -> {
                 val size = readVarInt(end) ?: return truncated()
                 if (size > end - buffer.position()) return truncated()
@@ -100,6 +104,42 @@ class FlpParser private constructor(private val data: ByteArray) {
             }
         }
         return true
+    }
+
+    private fun detectEvent172Size(start: Int, end: Int): Int =
+        if (!framesExactly(start, end, DWORD_SIZE) && framesExactly(start, end, SHORT_EVENT_172_SIZE)) {
+            SHORT_EVENT_172_SIZE
+        } else {
+            DWORD_SIZE
+        }
+
+    private fun framesExactly(start: Int, end: Int, size172: Int): Boolean {
+        var offset = start
+        while (offset < end) {
+            val id = data[offset].toInt() and 0xFF
+            offset++
+            when {
+                id < FlpEvents.WORD_START -> offset += 1
+                id < FlpEvents.DWORD_START -> offset += 2
+                id == FlpEvents.SHORT_DWORD -> offset += size172
+                id < FlpEvents.TEXT_START -> offset += DWORD_SIZE
+                else -> {
+                    var size = 0L
+                    var shift = 0
+                    while (true) {
+                        if (offset >= end || shift >= 35) return false
+                        val byte = data[offset].toInt() and 0xFF
+                        offset++
+                        size = size or ((byte and 0x7F).toLong() shl shift)
+                        shift += 7
+                        if (byte and 0x80 == 0) break
+                    }
+                    if (size > end - offset) return false
+                    offset += size.toInt()
+                }
+            }
+        }
+        return offset == end
     }
 
     private fun truncated(): Boolean {
@@ -195,7 +235,7 @@ class FlpParser private constructor(private val data: ByteArray) {
             val key = buffer.getShort(offset + 12).toInt() and 0xFFFF
             val release = data[offset + 18].toInt() and 0xFF
             val velocity = data[offset + 21].toInt() and 0xFF
-            if (length == 0L || key > MAX_FLP_KEY) continue
+            if (key > MAX_FLP_KEY) continue
             pattern.notes += FlpNote(
                 position = position,
                 length = length,
@@ -208,14 +248,17 @@ class FlpParser private constructor(private val data: ByteArray) {
         }
     }
 
-    private fun playlistItemSize(size: Int): Int? {
-        val preferred = if (versionMajor >= 21) PLAYLIST_ITEM_SIZE_FL21 else PLAYLIST_ITEM_SIZE
-        return listOf(preferred, PLAYLIST_ITEM_SIZE_FL21, PLAYLIST_ITEM_SIZE).firstOrNull { size % it == 0 }
-    }
+    private fun playlistItemSize(start: Int, size: Int): Int? =
+        PLAYLIST_ITEM_SIZES.firstOrNull { candidate ->
+            size % candidate == 0 && (0 until size / candidate).all { index ->
+                val base = buffer.getShort(start + index * candidate + 4).toInt() and 0xFFFF
+                base == PLAYLIST_PATTERN_BASE
+            }
+        }
 
     private fun readPlaylist(start: Int, size: Int) {
         val arrangement = currentArrangement ?: arrangements.getOrPut(0) { ArrangementDraft(0) }.also { currentArrangement = it }
-        val itemSize = playlistItemSize(size)
+        val itemSize = playlistItemSize(start, size)
         if (itemSize == null) {
             warnings += "A playlist has an unexpected size, so its clips were skipped."
             return
@@ -284,8 +327,10 @@ class FlpParser private constructor(private val data: ByteArray) {
     companion object {
         private const val HEADER_SIZE = 22
         private const val NOTE_SIZE = 24
-        private const val PLAYLIST_ITEM_SIZE = 32
-        private const val PLAYLIST_ITEM_SIZE_FL21 = 60
+        private const val DWORD_SIZE = 4
+        private const val SHORT_EVENT_172_SIZE = 3
+        private const val PLAYLIST_PATTERN_BASE = 20480
+        private val PLAYLIST_ITEM_SIZES = listOf(88, 60, 32)
         private const val NOTE_FLAG_SLIDE = 0x0008
         private const val MAX_FLP_KEY = 131
         private const val DEFAULT_PPQ = 96
