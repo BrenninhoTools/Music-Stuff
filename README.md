@@ -22,6 +22,10 @@ If the playlist has no pattern clips, patterns are placed one after another.
 - Plugins, samples, audio clips, automation and mixer settings aren't converted. You'll need to pick instruments again in FL Studio Mobile.
 - `.flm` notes can start up to beat 1023. Anything later is skipped, and the app tells you how many notes were affected.
 
+## Credits
+
+Headings use [Lilita One](https://fonts.google.com/specimen/Lilita+One) by Juan Montoreano, under the SIL Open Font License. See `licenses/OFL-LilitaOne.txt`.
+
 ## Building
 
 Requires JDK 17 and the Android SDK.
