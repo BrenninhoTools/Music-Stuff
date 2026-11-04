@@ -21,4 +21,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Music-Stuff"
-include(":app")
+val modules = providers.gradleProperty("musicstuff.modules").orNull?.split(',')?.map { it.trim() }?.toSet()
+fun wanted(name: String) = modules == null || name in modules
+if (wanted("app")) include(":app")
+if (wanted("desktop")) include(":desktop")

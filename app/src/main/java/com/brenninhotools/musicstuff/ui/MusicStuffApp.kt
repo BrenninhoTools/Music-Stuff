@@ -1,63 +1,189 @@
 package com.brenninhotools.musicstuff.ui
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.IntOffset
-import com.brenninhotools.musicstuff.ui.about.AboutScreen
-import com.brenninhotools.musicstuff.ui.converter.ConverterScreen
-import com.brenninhotools.musicstuff.ui.menu.MenuScreen
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.brenninhotools.musicstuff.flp.FlpArrangement
 
-private enum class Screen { MENU, CONVERTER, ABOUT }
+val WIDE_LAYOUT: Dp = 720.dp
 
-private const val TRANSITION_MILLIS = 220
+enum class AppScreen(val label: String) {
+    CONVERT("Convert"),
+    ABOUT("About"),
+}
 
 @Composable
-fun MusicStuffApp() {
-    var screen by rememberSaveable { mutableStateOf(Screen.MENU) }
-    val goToMenu = { screen = Screen.MENU }
+fun MusicStuffApp(controllerState: ConverterState, controller: ConverterController?) {
+    val platform = LocalPlatform.current
+    var screen by rememberSaveable { mutableStateOf(AppScreen.CONVERT) }
+    platform.backHandler(screen != AppScreen.CONVERT) { screen = AppScreen.CONVERT }
 
-    BackHandler(enabled = screen != Screen.MENU, onBack = goToMenu)
+    val onPick = { platform.pickProject { file -> controller?.open(file) } }
+    val onConvert = {
+        val current = controllerState as? ConverterState.Ready
+        if (current != null) {
+            platform.pickSaveTarget(flmFileName(current.fileName)) { target -> controller?.save(target) }
+        }
+    }
+    val onSelect = { arrangement: FlpArrangement -> controller?.selectArrangement(arrangement) ?: Unit }
 
-    Box(
+    AppShell(
+        screen = screen,
+        onSelectScreen = { screen = it },
+    ) { modifier ->
+        when (screen) {
+            AppScreen.CONVERT -> ConvertScreen(controllerState, onPick, onConvert, onSelect, modifier)
+            AppScreen.ABOUT -> AboutScreen(modifier)
+        }
+    }
+}
+
+@Composable
+fun AppShell(
+    screen: AppScreen,
+    onSelectScreen: (AppScreen) -> Unit,
+    content: @Composable (Modifier) -> Unit,
+) {
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .safeDrawingPadding(),
     ) {
-        AnimatedContent(
-            targetState = screen,
-            transitionSpec = {
-                val forward = targetState != Screen.MENU
-                val direction = if (forward) 1 else -1
-                val spec = tween<IntOffset>(TRANSITION_MILLIS)
-                (slideInHorizontally(spec) { it / 3 * direction } + fadeIn(tween(TRANSITION_MILLIS)))
-                    .togetherWith(slideOutHorizontally(spec) { -it / 3 * direction } + fadeOut(tween(TRANSITION_MILLIS)))
-            },
-            label = "screen",
-        ) { current ->
-            when (current) {
-                Screen.MENU -> MenuScreen(
-                    onOpenConverter = { screen = Screen.CONVERTER },
-                    onOpenAbout = { screen = Screen.ABOUT },
-                )
-                Screen.CONVERTER -> ConverterScreen(onBack = goToMenu)
-                Screen.ABOUT -> AboutScreen(onBack = goToMenu)
+        if (maxWidth >= WIDE_LAYOUT) {
+            Row(Modifier.fillMaxSize()) {
+                Rail(screen, onSelectScreen)
+                content(Modifier.weight(1f))
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                TopBar()
+                content(Modifier.weight(1f))
+                BottomNav(screen, onSelectScreen)
             }
         }
     }
 }
+
+@Composable
+private fun Mascot(size: Dp) {
+    Image(LocalPlatform.current.mascot(), contentDescription = null, modifier = Modifier.size(size))
+}
+
+@Composable
+private fun TopBar() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Mascot(44.dp)
+        Spacer(Modifier.width(6.dp))
+        Title()
+    }
+}
+
+@Composable
+private fun Title() {
+    Text(
+        text = "Music Stuff",
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.semantics { heading() },
+    )
+}
+
+@Composable
+private fun Rail(screen: AppScreen, onSelect: (AppScreen) -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(190.dp)
+            .fillMaxHeight()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Mascot(130.dp)
+        Title()
+        Spacer(Modifier.height(22.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AppScreen.entries.forEach { item ->
+                NavItem(item, item == screen, Modifier.fillMaxWidth()) { onSelect(item) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BottomNav(screen: AppScreen, onSelect: (AppScreen) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AppScreen.entries.forEach { item ->
+            NavItem(item, item == screen, Modifier.weight(1f)) { onSelect(item) }
+        }
+    }
+}
+
+@Composable
+private fun NavItem(item: AppScreen, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Sun else MaterialTheme.colorScheme.surface)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = item.label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+fun flmFileName(fileName: String): String =
+    fileName.substringBeforeLast('.', fileName).ifEmpty { "project" } + ".flm"

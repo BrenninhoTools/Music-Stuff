@@ -35,10 +35,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest
+        run: ./gradlew :app:testDebugUnitTest -Pmusicstuff.modules=app
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleDebug -Pmusicstuff.modules=app
 
       - name: Name the APK
         run: |
@@ -50,3 +50,62 @@ jobs:
         with:
           name: Music Stuff-Android
           path: out/Music Stuff-Android.apk
+
+  windows:
+    name: Music Stuff-Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build installer
+        shell: bash
+        run: ./gradlew :desktop:packageExe -Pmusicstuff.modules=desktop
+
+      - name: Name the installer
+        shell: bash
+        run: |
+          mkdir -p out
+          cp desktop/build/compose/binaries/main/exe/*.exe "out/Music Stuff-Windows.exe"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Music Stuff-Windows
+          path: out/Music Stuff-Windows.exe
+          compression-level: 0
+
+  screens:
+    name: Music Stuff-Screens
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Render screens
+        run: ./gradlew :desktop:test -Pmusicstuff.modules=desktop
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Music Stuff-Screens
+          path: desktop/build/screens
