@@ -45,4 +45,4 @@ Requires JDK 17. The Android build also needs the Android SDK.
 
 The iOS app needs macOS, Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen). After linking the framework, run `xcodegen generate` in `iosApp`. The `.ipa` from CI is unsigned, so sign it or sideload it to install.
 
-GitHub Actions builds on every push and uploads `Music Stuff-Android`, `Music Stuff-Windows`, `Music Stuff-Linux`, `Music Stuff-MacOS`, `Music Stuff-IOS` and rendered `Music Stuff-Screens` artifacts.
+GitHub Actions builds on every push to `main` and uploads `Music Stuff-Android`, `Music Stuff-Windows`, `Music Stuff-Linux`, `Music Stuff-MacOS` and `Music Stuff-IOS` artifacts.
