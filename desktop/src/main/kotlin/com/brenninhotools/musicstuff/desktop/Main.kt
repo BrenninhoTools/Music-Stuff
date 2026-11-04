@@ -29,7 +29,8 @@ fun main() = application {
         val platform = remember { desktopPlatform { window } }
         val scope = rememberCoroutineScope()
         val converter = remember { ConverterController(scope) }
-        val generator = remember { GeneratorController(scope, { platform.audio }) }
+        val player = remember { DesktopAudioPlayer() }
+        val generator = remember { GeneratorController(scope, { player }) }
         CompositionLocalProvider(LocalPlatform provides platform) {
             MusicStuffTheme(platform.font) {
                 MusicStuffApp(converter, generator)
